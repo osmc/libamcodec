@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <player_priv.h>
 #include <log_print.h>
+#include "player_priv.h"
 #include "thumbnail_type.h"
 
 static inline void calc_aspect_ratio(rational *ratio, struct stream *stream)
