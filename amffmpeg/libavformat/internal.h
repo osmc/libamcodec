@@ -23,7 +23,7 @@
 
 #include <stdint.h>
 #include "avformat.h"
-
+#include "amconfigutils.h"
 #define MAX_URL_SIZE 4096
 
 #ifdef DEBUG

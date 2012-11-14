@@ -33,7 +33,7 @@
 #include "asf.h"
 #include "http.h"
 #include "url.h"
-
+#include "mmsh.h"
 #define CHUNK_HEADER_LENGTH 4   // 2bytes chunk type and 2bytes chunk length.
 #define EXT_HEADER_LENGTH   8   // 4bytes sequence, 2bytes useless and 2bytes chunk length.
 
@@ -225,7 +225,10 @@ static int mmsh_open(URLContext *h, const char *uri, int flags)
         return AVERROR(ENOMEM);
     mmsh->request_seq = h->is_streamed = 1;
     mms = &mmsh->mms;
-    av_strlcpy(location, uri, sizeof(location));
+    if(strncmp(uri,"mmsh:http://",sizeof("mmsh:http://")))/*protocol swtich,add the mmsh on the header*/
+		av_strlcpy(location, uri+5, sizeof(location));//del the mmsh first
+	else
+    		av_strlcpy(location, uri, sizeof(location));
 
     av_url_split(NULL, 0, NULL, 0,
         host, sizeof(host), &port, path, sizeof(path), location);
@@ -359,7 +362,39 @@ static int mmsh_read(URLContext *h, uint8_t *buf, int size)
     } while (!res);
     return res;
 }
-
+int is_mmsh_file(AVIOContext *pb,const char *name)
+{
+	int score=0;
+	char line[1024+1];
+	int ret;
+	int linecnt=0;
+	if(!pb) return 0;	
+	do
+	{	
+		ret=ff_get_assic_line(pb,line,1024);		
+		if(ret==0){
+			if(url_feof(pb) || url_ferror(pb))
+				return 0;
+			}else if(ret<0)
+				break;
+		if(ret<5) continue;      	
+		if(!strncmp(line,"[Reference]",strlen("[Reference]"))){
+			score+=50;
+			continue;
+		}else if(!strncmp(line,"Ref1=",strlen("Ref1="))){
+			score+=30;
+			if(strstr(line,"MSWM.asf"))
+				score+=30;
+		}
+		else if(!strncmp(line,"Ref2=",strlen("Ref2="))){
+			score+=30;
+			if(strstr(line,"MSWM.asf"))
+				score+=30;
+		}
+	}while(score>=0 && score<100 && ret>0 && linecnt++<5);
+	av_log(NULL,AV_LOG_INFO,"is_mmsh_file=%d\n",score);
+	return score>=100?100:score;
+}
 URLProtocol ff_mmsh_protocol = {
     .name      = "mmsh",
     .url_open  = mmsh_open,

@@ -90,6 +90,7 @@ static int rtmp_open(URLContext *s, const char *uri, int flags)
 
     RTMP_Init(r);
     if (!RTMP_SetupURL(r, s->filename)) {
+	 
         rc = -1;
         goto fail;
     }
@@ -104,6 +105,8 @@ static int rtmp_open(URLContext *s, const char *uri, int flags)
 
     s->priv_data   = r;
     s->is_streamed = 1;
+    s->is_slowmedia =1;
+    av_log(NULL,AV_LOG_INFO,"rtmp open,url:%s\n",s->filename);		
     return 0;
 fail:
     av_free(r);

@@ -28,10 +28,10 @@
 #include "internal.h"
 #include "url.h"
 #include <stdarg.h>
-//#include "amconfigutils.h"
+#include "amconfigutils.h"
 
 #define IO_BUFFER_SIZE 32768
-
+#define IO_BUFFER_MIN_SIZE 1024
 /**
  * Do seeks within this distance ahead of the current buffer by skipping
  * data instead of calling the protocol seek function, for seekable
@@ -959,19 +959,21 @@ int ffio_fdopen(AVIOContext **s, URLContext *h)
     int ret;
     float value;
     if((h->flags & URL_MINI_BUFFER)){
-		//ret=am_getconfig_float("libplayer.ffmpeg.lpbufsizemin",&value);
-		//if(ret==0 && value>=1024){
-		//	lpbuffer_size=(int)value;
-		//}	
+		ret=am_getconfig_float("libplayer.ffmpeg.lpbufsizemin",&value);
+		if(ret==0 && value>=1024){
+			lpbuffer_size=(int)value;
+		}	
     }else{
-    	//	ret=am_getconfig_float("libplayer.ffmpeg.lpbufsizemax",&value);
-		//if(ret==0 && value>=1024*10){
-		//	lpbuffer_size=(int)value;
-		//}	
+    		ret=am_getconfig_float("libplayer.ffmpeg.lpbufsizemax",&value);
+		if(ret==0 && value>=1024*10){
+			lpbuffer_size=(int)value;
+		}	
     }
    av_log(NULL, AV_LOG_INFO, "getloopbuf size=%x\n",lpbuffer_size);
     max_packet_size = h->max_packet_size;
-    if (max_packet_size) {
+    if(h->flags & URL_MINI_BUFFER){
+	 buffer_size = IO_BUFFER_MIN_SIZE;
+    }else if (max_packet_size) {
         buffer_size = max_packet_size; /* no need to bufferize more than one packet */
     } else {
         buffer_size = IO_BUFFER_SIZE;
@@ -1074,8 +1076,10 @@ int ffio_rewind_with_probe_data(AVIOContext *s, unsigned char *buf, int buf_size
     buffer_size = s->buf_end - s->buffer;
     if(s->enabled_lp_buffer){/*have lowlevel lpbuf,can seek back here*/
 		ret=avio_seek(s,0,SEEK_SET);
-		if(ret==0)
-			return ret;
+		if(ret==0){
+			av_free(buf);
+			return 0;//let uplevel free buf,return 0.don't free
+		}
     }
     /* the buffers must touch or overlap */
     if ((buffer_start = s->pos - buffer_size) > buf_size)

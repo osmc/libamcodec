@@ -46,7 +46,10 @@ void av_register_all(void)
     initialized = 1;
 
     avcodec_register_all();
-
+    ///ff_cmf_demuxer
+    extern AVInputFormat ff_cmf_demuxer;
+    av_register_input_format(&ff_cmf_demuxer);
+	
     /* (de)muxers */
     REGISTER_MUXER    (A64, a64);
     REGISTER_DEMUXER  (AAC, aac);
@@ -267,5 +270,8 @@ extern AVInputFormat ff_hls_demuxer;
 	av_register_input_format(&ff_hls_demuxer);
 extern URLProtocol ff_hls_protocol ;
 	ffurl_register_protocol(&ff_hls_protocol,sizeof(ff_hls_protocol));
+
+extern URLProtocol ff_cmftest_protocol	;
+	ffurl_register_protocol(&ff_cmftest_protocol,sizeof(ff_cmftest_protocol));
 	
 }

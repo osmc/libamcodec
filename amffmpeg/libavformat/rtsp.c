@@ -249,6 +249,7 @@ static void sdp_parse_line(AVFormatContext *s, SDPParseState *s1,
     RTSPStream *rtsp_st;
     struct sockaddr_storage sdp_ip;
     int ttl;
+    int r1=0,r2=0;
 
     av_dlog(s, "sdp: %c='%s'\n", letter, buf);
 
@@ -349,7 +350,7 @@ static void sdp_parse_line(AVFormatContext *s, SDPParseState *s1,
         break;
     case 'a':
         if (av_strstart(p, "control:", &p)) {
-            if (rt->nb_rtsp_streams == 0) {
+            if (s->nb_streams == 0) {
                 if (!strncmp(p, "rtsp://", 7))
                     av_strlcpy(rt->control_uri, p,
                                sizeof(rt->control_uri));
@@ -379,8 +380,8 @@ static void sdp_parse_line(AVFormatContext *s, SDPParseState *s1,
             st = s->streams[s->nb_streams - 1];
             rtsp_st = rt->rtsp_streams[rt->nb_rtsp_streams - 1];
             sdp_parse_rtpmap(s, st, rtsp_st, payload_type, p);
-        } else if (av_strstart(p, "fmtp:", &p) ||
-                   av_strstart(p, "framesize:", &p)) {
+        } else if ((r1=av_strstart(p, "fmtp:", &p)) ||
+                   (r2=av_strstart(p, "framesize:", &p))) {
             /* NOTE: fmtp is only supported AFTER the 'a=rtpmap:xxx' tag */
             // let dynamic protocol handlers have a stab at the line.
             get_word(buf1, sizeof(buf1), &p);
@@ -393,6 +394,18 @@ static void sdp_parse_line(AVFormatContext *s, SDPParseState *s1,
                     rtsp_st->dynamic_handler->parse_sdp_a_line(s, i,
                         rtsp_st->dynamic_protocol_context, buf);
             }
+	    if(r2  && s->nb_streams > 0){//framesize
+		    	int w,h;
+			r1=r2=0;
+		    	r1=sscanf(p, "%d-", &w);
+			r2=sscanf(strstr(p,"-")+1, "%d", &h);
+			av_log(s, AV_LOG_INFO, "get video width:%d,height:%d\n", w,h);
+			st = s->streams[s->nb_streams - 1];
+			if(r1>0 && r2>0 && st->codec->codec_type == AVMEDIA_TYPE_VIDEO){
+				st->codec->width=w;
+				st->codec->height=h;
+			}
+	    }
         } else if (av_strstart(p, "range:", &p)) {
             int64_t start, end;
 
@@ -983,7 +996,7 @@ static int ff_rtsp_send_cmd_with_content_async(AVFormatContext *s,
         out_buf = base64buf;
     }
 
-    av_log(s, AV_LOG_INFO,"Sending:\n%s--\n", buf);
+    av_dlog(s, "Sending:\n%s--\n", buf);
 
     ffurl_write(rt->rtsp_hd_out, out_buf, strlen(out_buf));
     if (send_content_length > 0 && send_content) {
@@ -1372,7 +1385,7 @@ redirect:
 
     if (!lower_transport_mask)
         lower_transport_mask = (1 << RTSP_LOWER_TRANSPORT_NB) - 1;
-	
+
     if (s->oformat) {
         /* Only UDP or TCP - UDP multicast isn't supported. */
         lower_transport_mask &= (1 << RTSP_LOWER_TRANSPORT_UDP) |

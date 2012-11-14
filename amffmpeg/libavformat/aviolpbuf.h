@@ -26,6 +26,7 @@ typedef struct  url_lpbuf{
 	int cache_enable;
 	unsigned long cache_id;
 	int dbg_cnt;
+	float max_forword_level;
 }url_lpbuf_t;
 #define IO_LP_BUFFER_SIZE (1024*1024*64)
 #define IO_LP_BUFFER_MINI_SIZE (1024*32)

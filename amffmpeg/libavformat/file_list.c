@@ -32,10 +32,14 @@
 #include <stdlib.h>
 #include "os_support.h"
 #include "file_list.h"
-//#include "amconfigutils.h"
+#include "amconfigutils.h"
 
 static struct list_demux *list_demux_list=NULL;
 #define unused(x)	(x=x)
+
+#define LIVE_LIST_MAX 120 
+#define SHRINK_LIVE_LIST_THRESHOLD (LIVE_LIST_MAX/3)
+static int list_shrink_live_list(struct list_mgt *mgt);
 
 int register_list_demux(struct list_demux *demux)
 {
@@ -85,8 +89,10 @@ int list_add_item(struct list_mgt *mgt,struct list_item*item)
 	item->prev=prev;
        item->next = NULL;
 	mgt->item_num++;
+	
 	return 0;
 }
+
 
 int list_test_and_add_item(struct list_mgt *mgt,struct list_item*item)
 {
@@ -116,8 +122,11 @@ int list_test_and_add_item(struct list_mgt *mgt,struct list_item*item)
 	item->prev=prev;
 	item->next = NULL;
 	mgt->item_num++;
+	
 	return 0;
 }
+
+
 static int list_del_item(struct list_mgt *mgt,struct list_item*item)
 {
 	struct list_item*tmp;
@@ -149,6 +158,21 @@ static int list_del_item(struct list_mgt *mgt,struct list_item*item)
 	return 0;		
 }
 
+static int list_shrink_live_list(struct list_mgt *mgt){
+	struct list_item **tmp = NULL;
+	if(NULL ==mgt){
+		return -1;
+	}
+	tmp = &mgt->item_list;
+	if(!mgt->have_list_end){//not have list end,just refer to live streaming
+		while(mgt->item_num>SHRINK_LIVE_LIST_THRESHOLD&&*tmp!=mgt->current_item){
+			list_del_item(mgt,*tmp);
+			tmp = &mgt->item_list;	
+		}
+	}
+	av_log(NULL, AV_LOG_INFO, "shrink live item from list,total:%d\n",mgt->item_num);
+	return 0;
+}
 
 
 /*=======================================================================================*/
@@ -158,11 +182,11 @@ int url_is_file_list(ByteIOContext *s,const char *filename)
 	list_demux_t *demux;
 	ByteIOContext *lio=s;
 	int64_t	   *oldpos=0;
-	//if(am_getconfig_bool("media.amplayer.usedm3udemux"))
-	//	return 0;/*if used m3u demux,always failed;*/
+	if(am_getconfig_bool("media.amplayer.usedm3udemux"))
+		return 0;/*if used m3u demux,always failed;*/
 	if(!lio)
 	{
-		ret=url_fopen(&lio,filename,AVIO_FLAG_READ);
+		ret=url_fopen(&lio,filename,AVIO_FLAG_READ | URL_MINI_BUFFER);
 		if(ret!=0)
 		{ 
 		return AVERROR(EIO); 
@@ -196,6 +220,9 @@ reload:
 			return AVERROR(EIO); 
 		}
 	mgt->location=bio->reallocation;
+	if(NULL == mgt->location&&mgt->n_variants>0){//set location for multibandwidth streaming,such youtube,etc.
+		mgt->location = url;
+	}
 	demux=probe_demux(bio,url);
 	if(!demux)
 	{
@@ -208,19 +235,21 @@ reload:
 		ret=-1;
 		goto error;
 	}else{
-		if(mgt->item_num ==0&&mgt->n_variants>1){//simplely choose server,mabye need sort variants when got it from server.
+		if(mgt->item_num ==0&&mgt->n_variants>0){//simplely choose server,mabye need sort variants when got it from server.
 			if(bio){
 				url_fclose(bio);					
 			}
 			if(mgt->ctype ==HIGH_BANDWIDTH){
 				struct variant *v =mgt->variants[mgt->n_variants-1];
 				url = v->url;
-				av_log(NULL, AV_LOG_INFO, "reload playlist,url:%s\n",mgt->filename);
+				mgt->playing_variant = v;
+				av_log(NULL, AV_LOG_INFO, "reload playlist,url:%s\n",url);
 				goto reload;
 			}else if(mgt->ctype ==LOW_BANDWIDTH){
 				struct variant *v =mgt->variants[0];
 				url = v->url;
-				av_log(NULL, AV_LOG_INFO, "reload playlist,url:%s\n",mgt->filename);
+				mgt->playing_variant = v;
+				av_log(NULL, AV_LOG_INFO, "reload playlist,url:%s\n",url);
 				goto reload;
 			}else if(mgt->ctype ==MIDDLE_BANDWIDTH){
 				struct variant *v = NULL;
@@ -228,9 +257,10 @@ reload:
 					v =mgt->variants[mgt->n_variants/2 -1];
 				}else{
 					v =mgt->variants[mgt->n_variants-1];
-				}
+				}				
 				url = v->url;
-				av_log(NULL, AV_LOG_INFO, "reload playlist,url:%s\n",mgt->filename);
+				mgt->playing_variant = v;
+				av_log(NULL, AV_LOG_INFO, "reload playlist,url:%s,bandwidth:%d\n",url,mgt->playing_variant->bandwidth);
 				goto reload;
 			}
 		}
@@ -264,11 +294,14 @@ static int list_open(URLContext *h, const char *filename, int flags)
 		return ret;
 	}
 	lp_lock_init(&mgt->mutex,NULL);
-	if(!mgt->have_list_end && (!mgt->have_sub_list) && mgt->item_list->prev != NULL)
-		mgt->current_item=mgt->item_list->prev;//if a live stream,we play the end item to low latency.
-	else
+	if(!mgt->have_list_end && (!mgt->have_sub_list)&&(mgt->target_duration<5)){
+		struct list_item *item=mgt->item_list;
+		int itemindex=mgt->item_num/2+1;/*for live streaming ,choose the middle item.*/
+		while(itemindex-->0 && item!=NULL)
+			item=item->next;
+		mgt->current_item=item;
+	}else
 		mgt->current_item=mgt->item_list;	
-
 	mgt->cur_uio=NULL;
  	h->is_streamed=1;
 	h->is_slowmedia=1;
@@ -287,12 +320,32 @@ static struct list_item * switchto_next_item(struct list_mgt *mgt)
 	struct list_item *current = NULL;
 	if(!mgt)
 		return NULL;
+	
+	int64_t reload_interval = mgt->item_num> 0&&mgt->current_item!=NULL?
+		mgt->current_item->duration :
+		mgt->target_duration;	
+	int isNeedFetch = 1;	
 	if(mgt->current_item==NULL || mgt->current_item->next==NULL){
 			/*new refresh this mgtlist now*/
 			ByteIOContext *bio;
 			
 			int ret;
-			if((ret=list_open_internet(&bio,mgt,mgt->filename,mgt->flags| URL_MINI_BUFFER | URL_NO_LP_BUFFER))!=0)
+			char* url = NULL;
+			if(mgt->n_variants>0&&NULL!=mgt->playing_variant){
+				url = mgt->playing_variant->url;
+				av_log(NULL, AV_LOG_INFO,"list open variant url:%s,bandwidth:%d\n",url,mgt->playing_variant->bandwidth);
+			}else{				
+				url = mgt->filename;
+				av_log(NULL, AV_LOG_INFO,"list open url:%s\n",url);
+			}
+			
+
+			reload_interval *= 500000;
+			if(!mgt->have_list_end&&(av_gettime() - mgt->last_load_time < reload_interval)){
+				av_log(NULL, AV_LOG_INFO,"drop fetch playlist from server\n");
+				isNeedFetch = 0;
+			}
+			if(isNeedFetch ==0||(ret=list_open_internet(&bio,mgt,url,mgt->flags| URL_MINI_BUFFER | URL_NO_LP_BUFFER))!=0)
 			{
 				goto switchnext;
 			}
@@ -307,11 +360,17 @@ static struct list_item * switchto_next_item(struct list_mgt *mgt)
 						break;
 					}
 				}
+				#if 0
 				while(current!=mgt->item_list){
 					/*del the old item,lest current,and then play current->next*/
 					list_del_item(mgt,mgt->item_list);
 				}
+				#endif
+
 				mgt->current_item=current;/*switch to new current;*/
+				if(!mgt->have_list_end &&mgt->item_num>LIVE_LIST_MAX){
+					list_shrink_live_list(mgt);
+				}				
 			}
 	}
 switchnext:
@@ -329,14 +388,18 @@ switchnext:
 
 static void fresh_item_list(struct list_mgt *mgt){	
 	int retries = 5;
+	int reload_interval = mgt->target_duration * 500000;
 	do{	
-		if((switchto_next_item(mgt))!=NULL)
-		{
+		if((switchto_next_item(mgt))!=NULL){
 			av_log(NULL, AV_LOG_INFO, "refresh the Playlist,item num:%d,filename:%s\n",mgt->item_num,mgt->filename);		
 			break;
 		}	
-		else{			
-			usleep(50000); //50ms
+		else{	
+			if (url_interrupt_cb()){     
+				av_log(NULL, AV_LOG_ERROR," url_interrupt_cb\n");	
+				break;
+			}
+			usleep(reload_interval); //50ms
 			av_log(NULL, AV_LOG_INFO, "no new item,wait next refresh,current item num:%d\n",mgt->item_num);	
 		}
 
@@ -344,6 +407,7 @@ static void fresh_item_list(struct list_mgt *mgt){
 
 }
 
+#include "libavutil/aes.h"
 static int list_read(URLContext *h, unsigned char *buf, int size)
 {   
 	struct list_mgt *mgt = h->priv_data;
@@ -475,9 +539,12 @@ readagain:
 		if(item && (item->flags & ENDLIST_FLAG)){
 		    if(mgt->cur_uio)
 			    url_fclose(mgt->cur_uio);
-    		av_log(NULL, AV_LOG_INFO, "ENDLIST_FLAG, return 0\n");
+    			av_log(NULL, AV_LOG_INFO, "ENDLIST_FLAG, return 0\n");
 			return 0;
 		}
+
+		
+		
 		item=switchto_next_item(mgt);
 		if(!item){
 			if(mgt->flags&REAL_STREAMING_FLAG){
@@ -495,6 +562,7 @@ readagain:
 			url_fclose(mgt->cur_uio);
 		mgt->cur_uio=NULL;
 		mgt->current_item=item;
+		
 		if(item->flags & ENDLIST_FLAG){
 			av_log(NULL, AV_LOG_INFO, "reach list end now!,item=%x\n",item);
 			return 0;/*endof file*/
@@ -508,10 +576,13 @@ readagain:
 			av_log(NULL, AV_LOG_INFO, "[%s]item->flags=%x \n", __FUNCTION__, item->flags);
 			goto retry;
 		}
+		
 	}
+	#if 0
 	if(mgt->flags&REAL_STREAMING_FLAG&&mgt->item_num<4){ //force refresh items
 		fresh_item_list(mgt);	
 	}
+	#endif
 
 	//av_log(NULL, AV_LOG_INFO, "list_read end buf=%x,size=%d return len=%x\n",buf,size,len);
     return len;
@@ -579,15 +650,21 @@ static int64_t list_seek(URLContext *h, int64_t pos, int whence)
 	
 	if(whence == AVSEEK_TO_TIME)
 	{
-		av_log(NULL, AV_LOG_INFO, "list_seek to Time =%lld,whence=%x\n",pos,whence);
+		av_log(NULL, AV_LOG_INFO, "list_seek to Time =%lld,whence=%x,have sublist:%d\n",pos,whence,mgt->have_sub_list);
 		if (!mgt->have_sub_list) {
 			if(pos>=0 && pos<mgt->full_time) {
+
 				for(item=mgt->item_list;item;item=item->next)
 				{
+					
 					if(item->start_time<=pos && pos <item->start_time+item->duration)
 					{	
-						if(mgt->cur_uio)
+						if(mgt->cur_uio){
+							
 							url_fclose(mgt->cur_uio);
+
+						}
+						
 						mgt->cur_uio=NULL;
 						mgt->current_item=item;
 						av_log(NULL, AV_LOG_INFO, "list_seek to item->file =%s\n",item->file);

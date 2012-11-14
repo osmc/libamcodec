@@ -321,9 +321,25 @@ int ffurl_read(URLContext *h, unsigned char *buf, int size)
 
 int ffurl_read_complete(URLContext *h, unsigned char *buf, int size)
 {
+    int maxretry=10;
+    int toread=size;
+    int readedlen=0;
     if (!(h->flags & AVIO_FLAG_READ))
         return AVERROR(EIO);
-    return retry_transfer_wrapper(h, buf, size, size, h->prot->url_read);
+    while(toread>0 && maxretry-->0){
+		int ret;
+     		ret=retry_transfer_wrapper(h, buf+readedlen, toread, toread, h->prot->url_read);
+		if(ret>0){
+			toread-=ret;
+			readedlen+=ret;
+		}
+		if(url_interrupt_cb())
+			return AVERROR_EXIT;
+    }
+    if((size-toread)!=0)
+		return (size-toread);
+ 	else
+		return AVERROR(EAGAIN);
 }
 
 int ffurl_write(URLContext *h, const unsigned char *buf, int size)

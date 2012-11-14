@@ -897,7 +897,7 @@ int codec_get_vdec_state(codec_para_t *p, struct vdec_status *vdec)
 /* --------------------------------------------------------------------------*/
 int codec_get_adec_state(codec_para_t *p, struct adec_status *adec)
 {
-#if ANDROID
+#ifdef ANDROID
     if(get_audio_decoder()!=AUDIO_ARC_DECODER)
     return get_decoder_status(p->adec_priv,adec);
 #endif

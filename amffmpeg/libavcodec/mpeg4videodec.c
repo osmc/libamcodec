@@ -1904,6 +1904,7 @@ static int decode_vop_header(MpegEncContext *s, GetBitContext *gb){
     }
 
     s->partitioned_frame= s->data_partitioning && s->pict_type!=AV_PICTURE_TYPE_B;
+    s->avctx->mpeg4_partitioned = s->partitioned_frame;
     if(s->partitioned_frame)
         s->decode_mb= mpeg4_decode_partitioned_mb;
     else

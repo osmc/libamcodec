@@ -17,7 +17,11 @@ OBJS = allformats.o         \
        utils.o              \
        nsc.o	\
        hlsproto.o	\
-       hls.o	
+       hls.o	\
+       cmftest.o	\
+       cmfdec.o	\
+       cmfvpb.o	\
+       
        
 
 # muxers/demuxers

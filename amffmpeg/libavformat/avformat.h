@@ -42,6 +42,8 @@ const char *avformat_license(void);
 #include "libavcodec/avcodec.h"
 #include "libavutil/dict.h"
 
+#include "divxdrm.h"
+
 #include "avio.h"
 #include "libavformat/version.h"
 
@@ -227,6 +229,8 @@ typedef struct AVProbeData {
     const char *filename;
     unsigned char *buf; /**< Buffer must have AVPROBE_PADDING_SIZE of extra allocated bytes filled with zero. */
     int buf_size;       /**< Size of buf except extra allocated bytes */
+    AVIOContext *s;		
+    unsigned long pads[8];
 } AVProbeData;
 
 #define AVPROBE_SCORE_MAX 100               ///< maximum score, half of that is used for file-extension-based detection
@@ -894,6 +898,11 @@ typedef struct AVFormatContext {
 
 	uint64_t video_avg_frame_time, audio_avg_frame_time;
 
+	//--***********************************************
+    /* added by C.S for divx drm certification:drm information */
+    drm_t       drm;
+//--***********************************************  
+
     /* added by GP for storing music's embedded picture */
     int cover_data_len;
     uint8_t *cover_data;
@@ -905,6 +914,7 @@ typedef struct AVFormatContext {
 
     /* added by Z.C for DRM content */
     int drmcontent;
+
 } AVFormatContext;
 
 typedef struct AVPacketList {

@@ -6,6 +6,7 @@ LOCAL_C_INCLUDES :=		\
 	$(LOCAL_PATH)		\
 	$(LOCAL_PATH)/..	\
 	$(LOCAL_PATH)/../../amavutils/include/	\
+	$(LOCAL_PATH)/../../third_parts/rtmpdump	\
 	external/zlib
 LOCAL_CFLAGS += $(FFCFLAGS)
 LOCAL_MODULE := $(FFNAME)
@@ -18,10 +19,11 @@ LOCAL_C_INCLUDES :=		\
 	$(LOCAL_PATH)		\
 	$(LOCAL_PATH)/..	\
 	$(LOCAL_PATH)/../../amavutils/include/	\
+	$(LOCAL_PATH)/../../third_parts/rtmpdump	\
 	external/zlib
 LOCAL_CFLAGS += $(FFCFLAGS)
 LOCAL_MODULE := $(FFNAME)
-LOCAL_SHARED_LIBRARIES +=   libutils libmedia libz libbinder libdl libcutils libc libavutil libavcodec libamavutils
+LOCAL_SHARED_LIBRARIES += librtmp  libutils libmedia libz libbinder libdl libcutils libc libavutil libavcodec libamavutils
 LOCAL_PRELINK_MODULE := false
 LOCAL_MODULE_TAGS := optional
 include $(BUILD_SHARED_LIBRARY)

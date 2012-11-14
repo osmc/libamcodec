@@ -30,7 +30,7 @@
 #include <stdarg.h>
 #include "aviolpcache.h"
 #include "aviolpbuf.h"
-//#include "amconfigutils.h"
+#include "amconfigutils.h"
 /*
 Pos
 buffer    rp                         wp                   buffer_end
@@ -79,7 +79,7 @@ Can seek back size:
 
 
 #define LP_ASSERT(x)	 do{if(!(x)) av_log(NULL,AV_LOG_INFO,"****\t\tERROR at line file%s=%d\n\n\n",__FILE__,__LINE__);}while(0)
-
+#define MAX_READ_SEEK (16*1024*1024)
 int url_lpopen(URLContext *s,int size)
 {
 	url_lpbuf_t *lp;
@@ -89,18 +89,21 @@ int url_lpopen(URLContext *s,int size)
 	int bufsize=0;
 
 	if(size==0){
-		//size=am_getconfig_float("libplayer.ffmpeg.lpbufsizemax",&value);
-		//if(size<=0)
+		ret=am_getconfig_float("libplayer.ffmpeg.lpbufsizemax",&value);
+		if(ret<0 || value < 1024*32)
 			size=IO_LP_BUFFER_SIZE;
+		else{
+			size=(int)value;
+		}
 	}
 	lp_bprint( AV_LOG_INFO,"url_lpopen=%d\n",size);
 	if(!s)
 		return -1;
 		lp_bprint( AV_LOG_INFO,"url_lpopen2=%d\n",size);
-	//ret=am_getconfig_float("libplayer.ffmpeg.lpbufblocksize",&value);
-	//if(ret>=0 && value>=32){
-	//	blocksize=(int)value;
-	//}	
+	ret=am_getconfig_float("libplayer.ffmpeg.lpbufblocksize",&value);
+	if(ret>=0 && value>=32){
+		blocksize=(int)value;
+	}	
 	lp_sprint( AV_LOG_INFO,"lpbuffer block size=%d\n",blocksize);
 	lp=av_mallocz(sizeof(url_lpbuf_t));
 	if(!lp)
@@ -109,17 +112,19 @@ int url_lpopen(URLContext *s,int size)
 	if(!lp->buffer)
 	{
 		int failedsize=size/2;/*if no memory used 1/2 size */
-		//ret=am_getconfig_float("libplayer.ffmpeg.lpbuffaildsize",&value);
-		//if(ret>=0 && value>=1024){
-		//	failedsize=(int)value;
-		//}
+		ret=am_getconfig_float("libplayer.ffmpeg.lpbuffaildsize",&value);
+		if(ret>=0 && value>=1024){
+			failedsize=(int)value;
+		}
 		lp_sprint( AV_LOG_INFO,"malloc buf failed,used failed size=%d\n",failedsize);
 
 		lp->buffer=av_malloc(failedsize);	
 		while(!lp->buffer){
 			failedsize=failedsize/2;
-			if(failedsize<16*1024)/*do't malloc too small size failed size*/
+			if(failedsize<16*1024){/*do't malloc too small size failed size*/
+				av_free(lp);
 				return AVERROR(ENOMEM);
+			}
 			lp->buffer=av_malloc(failedsize);
 		}
 		bufsize=failedsize;
@@ -140,6 +145,13 @@ int url_lpopen(URLContext *s,int size)
 	lp->cache_enable=0;
 	lp->cache_id=aviolp_cache_open(s->filename,url_filesize(s));
 	lp->dbg_cnt=0;
+	ret=am_getconfig_float("libplayer.ffmpeg.lpbufmaxbuflv",&value);
+		if(ret<0)
+			lp->max_forword_level=1;
+		else{
+			lp->max_forword_level=value;
+		}
+	
 	if(lp->cache_id!=0)
 		lp->cache_enable=1;
 	lp_bprint( AV_LOG_INFO,"url_lpopen4%d\n",bufsize);
@@ -394,9 +406,10 @@ int64_t url_lpseek(URLContext *s, int64_t offset, int whence)
 		if(lp->rp<lp->buffer)
 			lp->rp+=lp->buffer_size;
 		
-	}else if(offset1>0 && (s->is_streamed || s->is_slowmedia) && 
-			(offset1<lp->buffer_size-lp->block_read_size) && 
-			(lp->file_size<=0 || (lp->file_size>0 && offset1<lp->file_size/2)))/*if offset1>filesize/2,thendo first seek end,don't buffer*/
+	}else if( (s->is_streamed && offset1>0) || /*can't suport seek,and can support read seek.*/
+			((offset1>0 &&  s->is_slowmedia) && 	/*is slowmedia and seek formard*/
+			(offset1<lp->buffer_size-lp->block_read_size && offset1<MAX_READ_SEEK) &&/*don't do too big size seek*/ 
+			(lp->file_size<=0 || (lp->file_size>0 && offset1<lp->file_size/2))))/*if offset1>filesize/2,thendo first seek end,don't buffer*/
 	{/*seek to buffer end,but buffer is not full,do read seek*/
 		int read_offset,ret;
 		lp_sprint( AV_LOG_INFO, "url_lpseek:buffer read seek forward offset=%lld offset1=%lld  whence=%d\n",offset,offset1,whence);
@@ -540,7 +553,7 @@ int url_lp_intelligent_buffering(URLContext *s,int size)
 	int forward_data,back_data;
 	int datalen;
 	url_lpbuf_t *lp;
-	int ret=0;
+	int ret=-1;
 	
 	if(!s || !s->lpbuf)
 		return AVERROR(EINVAL);
@@ -554,7 +567,8 @@ int url_lp_intelligent_buffering(URLContext *s,int size)
 	if(lp->dbg_cnt%100==0)
 		lp_print( AV_LOG_INFO, "url_lp buffering:datalen=%d,forward_datad=%d,back_data=%d,lp->buffer_size=%d,size=%d\n",
 			datalen,forward_data,back_data,lp->buffer_size,size);
-	if(datalen>=0 && ((datalen <lp->buffer_size-1024) || (back_data>(forward_data/2+1)) || (back_data>3*1024*1024)))
+	if(datalen>=0 && ((forward_data/lp->buffer_size)<lp->max_forword_level) && 
+	    ((datalen <lp->buffer_size-1024) || (back_data>(forward_data/2+1)) || (back_data>3*1024*1024)) )
 		ret=url_lpfillbuffer(s,size);/*lest 1/3 back data && < 3M back data*/
 
 	return ret;

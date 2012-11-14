@@ -1294,6 +1294,7 @@ typedef struct AVCodecContext {
     /* audio only */
     int sample_rate; ///< samples per second
     int channels;    ///< number of audio channels
+    int audio_profile;      ///<audio profile
 
     /**
      * audio sample format
@@ -2923,6 +2924,10 @@ typedef struct AVCodecContext {
     /* added by Z.C
      * to record vc1_profile */
      int vc1_profile;
+
+    /* added by Z.C
+     * to record mpeg4 partitioned */
+     int mpeg4_partitioned;
 } AVCodecContext;
 
 /**

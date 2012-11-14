@@ -63,7 +63,10 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
         }
     }
     memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_UNSPEC;
+    if(am_getconfig_bool("media.libplayer.ipv4only"))	
+    		hints.ai_family = AF_INET;
+    else
+		hints.ai_family = AF_UNSPEC;	
     hints.ai_socktype = SOCK_STREAM;
     snprintf(portstr, sizeof(portstr), "%d", port);
 	av_log(h, AV_LOG_INFO,"TCP connect to %s port %d \n",hostname,port);
@@ -74,7 +77,7 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
                hostname, gai_strerror(ret));
         return AVERROR(EIO);
     }
-
+    av_log(h, AV_LOG_INFO,"resolved %s's  ipaddress \n",hostname);
     cur_ai = ai;
 
  restart:
@@ -139,6 +142,7 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
             goto fail;
         }
     }
+    av_log(h, AV_LOG_INFO,"tcp  connect %s ok!\n",hostname);	
     s = av_malloc(sizeof(TCPContext));
     if (!s) {
         freeaddrinfo(ai);
@@ -179,7 +183,6 @@ static int tcp_read(URLContext *h, uint8_t *buf, int size)
 	if(ret<=0){
 		av_log(h, AV_LOG_INFO,"tcp_read return error %d \n",ret);
 	}
-
     return ret < 0 ? ff_neterrno() : ret;
 }
 
