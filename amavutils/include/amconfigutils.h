@@ -18,14 +18,13 @@ extern "C" {
     int am_dumpallconfigs(void);
     int am_getconfig_bool(const char * path);
 #else
-    inline int am_config_init(void) { return 0 };
-    inline int am_getconfig(const char * path, char *val, const char * def) { return -1 };
-    inline int am_setconfig(const char * path, const char *val) { return -1 };
-    inline int am_setconfig_float(const char * path, float value) { return -1 };
-    inline int am_getconfig_float(const char * path, float *value) { return -1 };
-    inline int am_dumpallconfigs(void) { return -1 };
-    inline int am_getconfig_bool(const char * path) { return -1 };
-
+    static inline int am_config_init(void) { return 0; };
+    static inline int am_getconfig(const char * path, char *val, const char * def) { return -1; };
+    static inline int am_setconfig(const char * path, const char *val) { return -1; };
+    static inline int am_setconfig_float(const char * path, float value) { return -1; };
+    static inline int am_getconfig_float(const char * path, float *value) { return -1; };
+    static inline int am_dumpallconfigs(void) { return -1; };
+    static inline int am_getconfig_bool(const char * path) { return -1; };
 #endif
 
 #ifdef  __cplusplus
