@@ -845,6 +845,9 @@ int alsa_set_volume(struct aml_audio_dec* audec, float vol)
 {
     alsa_param_t *alsa_param = (alsa_param_t *)audec->aout_ops.private_data;
 
+    if (!alsa_param)
+      return 0;
+
     if (vol > 1.0f)
         alsa_param->volume_deamp = 1.0f;
     else if (vol < 0.0f)
