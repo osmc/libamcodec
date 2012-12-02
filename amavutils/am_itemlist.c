@@ -9,8 +9,8 @@
 #include <sys/time.h>
 #include <time.h>
 #include <pthread.h>
-#include "player_itemlist.h"
-#include "player_priv.h"
+#include <stdlib.h>
+#include <am_itemlist.h>
 
 #ifdef ITEMLIST_WITH_LOCK
 #define ITEM_LOCK(pitems)\
@@ -44,13 +44,13 @@ int itemlist_init(struct itemlist *itemlist)
 }
 
 struct item * item_alloc(int ext) {
-    return MALLOC(sizeof(struct item) + ext);
+    return malloc(sizeof(struct item) + ext);
 }
 
 
 void item_free(struct item *item)
 {
-    FREE(item);
+    free(item);
 }
 
 
@@ -197,7 +197,7 @@ int itemlist_add_tail_data(struct itemlist *itemlist, unsigned long data)
     }
     item = item_alloc(itemlist->item_ext_buf_size);
     if (item == NULL) {
-        return PLAYER_NOMEM;
+        return -12;//noMEM
     }
     item->item_data = data;
     if (itemlist_add_tail(itemlist, item) != 0) {

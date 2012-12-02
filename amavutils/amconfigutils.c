@@ -197,8 +197,8 @@ int am_getconfig_bool(const char * path)
 
     ret = am_getconfig(path, buf,NULL);
     if (ret > 0) {
-	if(strcasecmp(buf,"true")==0 || strcmp(buf,"1")==0)
-		return 1;
+        if(strcasecmp(buf,"true")==0 || strcmp(buf,"1")==0)
+            return 1;
     }
     return 0;
 }

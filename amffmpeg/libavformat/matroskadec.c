@@ -798,7 +798,7 @@ static int ebml_parse(MatroskaDemuxContext *matroska, EbmlSyntax *syntax,
 {
     if (!matroska->current_id) {
         uint64_t id;
-        int res = ebml_read_num(matroska, matroska->ctx->pb, 4, &id);
+        int res = ebml_read_num(matroska, matroska->ctx->pb, 8, &id);
         if (res < 0)
             return res;
         matroska->current_id = id | 1 << 7*res;
@@ -848,6 +848,7 @@ static int ebml_parse_elem(MatroskaDemuxContext *matroska,
     uint32_t id = syntax->id;
     uint64_t length;
     int res;
+    int64_t pos,offset_next ;
 
     data = (char *)data + syntax->data_offset;
     if (syntax->list_elem_size) {
@@ -883,7 +884,17 @@ static int ebml_parse_elem(MatroskaDemuxContext *matroska,
                      return ebml_parse_nest(matroska, syntax->def.n, data);
     case EBML_PASS:  return ebml_parse_id(matroska, syntax->def.n, id, data);
     case EBML_STOP:  return 1;
-    default:         return avio_skip(pb,length)<0 ? AVERROR(EIO) : 0;
+    default:
+		pos= avio_tell(pb);
+		offset_next=pos+length;
+		if (matroska->num_levels > 0) {
+		    MatroskaLevel *level = &matroska->levels[matroska->num_levels - 1];
+		    if ((offset_next>level->start)&&(offset_next - level->start) > level->length) { 
+		        av_log(matroska->ctx, AV_LOG_ERROR, "Invalid EBML data length, exceed top master size\n");
+		        return avio_skip(pb,level->start+level->length-pos)<0 ? AVERROR(EIO) : 0;			  	
+		   }
+		}
+		return avio_skip(pb,length)<0 ? AVERROR(EIO) : 0;
     }
     if (res == AVERROR_INVALIDDATA)
         av_log(matroska->ctx, AV_LOG_ERROR, "Invalid element\n");
@@ -2012,6 +2023,7 @@ static int matroska_read_seek(AVFormatContext *s, int stream_index,
         avio_seek(s->pb, st->index_entries[st->nb_index_entries-1].pos, SEEK_SET);
         while ((index = av_index_search_timestamp(st, timestamp, flags)) < 0) {
             matroska_clear_queue(matroska);
+            matroska->current_id = 0;
             if (matroska_parse_cluster(matroska) < 0)
                 break;
         }
@@ -2032,12 +2044,14 @@ static int matroska_read_seek(AVFormatContext *s, int stream_index,
             index_sub = av_index_search_timestamp(tracks[i].stream, st->index_entries[index].timestamp, AVSEEK_FLAG_BACKWARD);
             if (index_sub >= 0
                 && st->index_entries[index_sub].pos < st->index_entries[index_min].pos
-                && st->index_entries[index].timestamp - st->index_entries[index_sub].timestamp < 30000000000/matroska->time_scale)
+                && st->index_entries[index].timestamp - st->index_entries[index_sub].timestamp < 10000000000/matroska->time_scale
+                && st->index_entries[index_min].pos-st->index_entries[index_sub].pos <0x100000)
                 index_min = index_sub;
         }
     }
 
     avio_seek(s->pb, st->index_entries[index_min].pos, SEEK_SET);
+    matroska->current_id = 0;
     matroska->skip_to_keyframe = !(flags & AVSEEK_FLAG_ANY);
     matroska->skip_to_timecode = st->index_entries[index].timestamp;
     matroska->done = 0;

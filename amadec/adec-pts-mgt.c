@@ -25,7 +25,6 @@ unsigned long adec_calc_pts(aml_audio_dec_t *audec)
 {
     int audio_delay_pts;
     unsigned long pts, delay_pts;
-
     audio_out_operations_t *out_ops;
     dsp_operations_t *dsp_ops;
 
@@ -85,6 +84,17 @@ int adec_pts_start(aml_audio_dec_t *audec)
     adec_print("av sync threshold is %d \n", audec->avsync_threshold);
 
     dsp_ops->last_pts_valid = 0;
+    // before audio start or pts start
+    fd = open(TSYNC_EVENT, O_WRONLY);
+    if(fd < 0){
+      adec_print("unable open file %s, err: %s", TSYNC_EVENT, strerror(errno));
+      return -1;
+    }
+    sprintf(buf, "AUDIO_PRE_START", 0);
+    write(fd, buf, strlen(buf));
+    close(fd);
+
+    usleep(1000);
 
     pts = adec_calc_pts(audec);
     if (pts == -1) {
@@ -214,13 +224,14 @@ int adec_pts_resume(void)
  * \param audec pointer to audec
  * \return 0 on success otherwise -1
  */
+ static int apts_interrupt=0;
 int adec_refresh_pts(aml_audio_dec_t *audec)
 {
     unsigned long pts;
     unsigned long systime;
     unsigned long last_pts = audec->adsp_ops.last_audio_pts;
     unsigned long last_kernel_pts = audec->adsp_ops.kernel_audio_pts;
-    int fd;
+    int fd = -1;
     char buf[64];
 
     if (audec->auto_mute == 1) {
@@ -237,18 +248,21 @@ int adec_refresh_pts(aml_audio_dec_t *audec)
     }
 
     read(fd, buf, sizeof(buf));
-    close(fd);
+    if(fd>=0){
+        close(fd);
+        fd = -1;
+    }
 
     if (sscanf(buf, "0x%lx", &systime) < 1) {
         adec_print("unable to getsystime %s", buf);
-        close(fd);
+        //close(fd);
         return -1;
     }
 
     /* get audio time stamp */
     pts = adec_calc_pts(audec);
     if (pts == -1 || last_pts == pts) {
-        close(fd);
+        //close(fd);
         //if (pts == -1) {
         return -1;
         //}
@@ -271,11 +285,12 @@ int adec_refresh_pts(aml_audio_dec_t *audec)
         sprintf(buf, "AUDIO_TSTAMP_DISCONTINUITY:0x%lx", pts);
         write(fd, buf, strlen(buf));
         close(fd);
-
+	 fd = -1;
         audec->adsp_ops.last_audio_pts = pts;
         audec->adsp_ops.last_pts_valid = 1;
+        adec_print("set automute!\n");
         audec->auto_mute = 1;
-
+        apts_interrupt=10;
         return 0;
     }
 
@@ -287,8 +302,13 @@ int adec_refresh_pts(aml_audio_dec_t *audec)
     audec->adsp_ops.last_pts_valid = 1;
 
     if (abs(pts - systime) < audec->avsync_threshold) {
+        apts_interrupt=0;
         return 0;
     }
+    else if(apts_interrupt>0){
+        apts_interrupt --;
+        return 0;
+        }
 
     /* report apts-system time difference */
     fd = open(TSYNC_APTS, O_RDWR);
@@ -302,7 +322,7 @@ int adec_refresh_pts(aml_audio_dec_t *audec)
     sprintf(buf, "0x%lx", pts);
     write(fd, buf, strlen(buf));
     close(fd);
-
+    fd = -1;
     return 0;
 }
 
@@ -367,7 +387,10 @@ int track_switch_pts(aml_audio_dec_t *audec)
         adec_print("unable to get apts");
         return 1;
     }
-
+    
+    if((apts > pcr) && (apts - pcr > 0x100000))
+        return 0;
+		
     if (abs(apts - pcr) < audec->avsync_threshold || (apts <= pcr)) {
         return 0;
     } else {

@@ -49,12 +49,15 @@ typedef struct {
     uint8_t *asf_header;                 ///< Stored ASF header.
     int asf_header_size;                 ///< Size of stored ASF header.
     int header_parsed;                   ///< The header has been received and parsed.
-    int asf_packet_len;
+    int asf_packet_len;    	
     int asf_header_read_size;
     /*@}*/
 
     int stream_num;                      ///< stream numbers.
     unsigned int nb_streams_allocated;   ///< allocated size of streams
+    uint64_t file_size;         /**< in bytes**/
+    int flags; /*asf file properties object,flags*/	
+	
 } MMSContext;
 
 int ff_mms_asf_header_parser(MMSContext * mms);

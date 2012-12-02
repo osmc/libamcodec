@@ -2928,6 +2928,10 @@ typedef struct AVCodecContext {
     /* added by Z.C
      * to record mpeg4 partitioned */
      int mpeg4_partitioned;
+
+    /* added by Z.C
+     * for some special ps files */
+     int mpegps_video_idprobed;
 } AVCodecContext;
 
 /**

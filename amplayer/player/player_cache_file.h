@@ -43,7 +43,7 @@ int cachefile_searce_valid_bytes(struct cache_file * cache, int64_t off, int max
 int cachefile_is_cache_filename(const char *name);
 int cachefile_read(struct cache_file * cache, int64_t off, char *buf, int size);
 int cachefile_write(struct cache_file * cache, int64_t off, char *buf, int size);
-int cachefile_has_cached_currentfile(const char *dir, const char *url, int size);
+int cachefile_has_cached_currentfile(const char *dir, const char *url, int size,int flags);
 
 
 

@@ -104,15 +104,17 @@ static int GetNumChannelsADIF(ProgConfigElement *fhPCE, int nPCE)
 {
 	int i, j, nChans;
 
-	if (nPCE < 1 || nPCE > MAX_NUM_PCE_ADIF)
+	if (/*nPCE < 1 ||*/ nPCE > MAX_NUM_PCE_ADIF)
 		return -1;
 
 	nChans = 0;
 	for (i = 0; i < nPCE; i++) {
+		av_log(NULL, AV_LOG_INFO,"ADIF_INFO:fhPCE[i].profile=%d fhPCE[i].numCCE=%d\n",fhPCE[i].profile,fhPCE[i].numCCE);
+        #if 0
 		/* for now: only support LC, no channel coupling */
 		if (fhPCE[i].profile != 1/*LC*/ || fhPCE[i].numCCE > 0)
 			return -1;
-
+        #endif
 		/* add up number of channels in all channel elements (assume all single-channel) */
         nChans += fhPCE[i].numFCE;
         nChans += fhPCE[i].numSCE;
@@ -190,20 +192,23 @@ int adif_header_parse(AVStream *st,ByteIOContext *pb)
 	fhADIF->bsType =   get_bits(&gbc,1);
 	fhADIF->bitRate =  get_bits(&gbc,23);
 	fhADIF->numPCE =   get_bits(&gbc, 4) + 1;	/* add 1 (so range = [1, 16]) */
-	if (fhADIF->bsType == 0)
-		fhADIF->bufferFull = get_bits(&gbc, 20);
-
 	/* parse all program config elements */
-	for (i = 0; i < fhADIF->numPCE; i++)
+	for (i = 0; i < fhADIF->numPCE; i++){
+	   if (fhADIF->bsType == 0)
+		   fhADIF->bufferFull = get_bits(&gbc, 20);
+	   else
+	   	   fhADIF->bufferFull = 0;
 		DecodeProgramConfigElement(pce + i, &gbc);
+	}
 
 	/* byte align */
 	align_get_bits(&gbc);
 
 	/* update codec info */
-	ch = GetNumChannelsADIF(pce, fhADIF->numPCE);
+	ch = GetNumChannelsADIF(pce, 1/*fhADIF->numPCE*/);
 	sr_index = GetSampleRateIdxADIF(pce, fhADIF->numPCE);
 
+	av_log(st, AV_LOG_INFO,"ADIF_INFO:ch=%d sr_index=%d\n",ch,sr_index);
 	//	/* check validity of header */
 	if (ch < 0 || sr_index < 0 || sr_index >= NUM_SAMPLE_RATES){
 		

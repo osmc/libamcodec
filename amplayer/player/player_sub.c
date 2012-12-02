@@ -17,7 +17,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 
-#include "list.h"
+#include "am_list.h"
 #include "player_sub.h"
 #include "player_priv.h"
 

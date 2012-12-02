@@ -647,6 +647,7 @@ typedef struct AVStream {
      int no_extra_offset;
      float special_fps;  // for some special stream
      int rotation_degree;
+    int encrypt;
 } AVStream;
 
 #define AV_PROGRAM_RUNNING 1
@@ -914,7 +915,7 @@ typedef struct AVFormatContext {
 
     /* added by Z.C for DRM content */
     int drmcontent;
-
+	int skip_extradata;
 } AVFormatContext;
 
 typedef struct AVPacketList {

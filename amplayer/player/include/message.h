@@ -1,7 +1,7 @@
 #ifndef PLAYER_MESSAGE_H
 #define PLAYER_MESSAGE_H
 
-#define MESSAGE_MAX 4
+#define MESSAGE_MAX 8
 
 #define CTRL_CMD_RESPONSE   (0xffff)
 
@@ -85,6 +85,5 @@ typedef struct {
 int message_free(player_cmd_t * cmd);
 player_cmd_t * message_alloc(void);
 int cmd2str(player_cmd_t *cmd, char *buf);
-
 #endif
 

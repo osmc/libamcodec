@@ -1,3 +1,4 @@
+
 /*
  * Buffered I/O for ffmpeg system
  * Copyright (c) 2000,2001 Fabrice Bellard
@@ -79,7 +80,7 @@ Can seek back size:
 
 
 #define LP_ASSERT(x)	 do{if(!(x)) av_log(NULL,AV_LOG_INFO,"****\t\tERROR at line file%s=%d\n\n\n",__FILE__,__LINE__);}while(0)
-#define MAX_READ_SEEK (16*1024*1024)
+#define DEF_MAX_READ_SEEK (1024*1024*3)
 int url_lpopen(URLContext *s,int size)
 {
 	url_lpbuf_t *lp;
@@ -87,7 +88,7 @@ int url_lpopen(URLContext *s,int size)
 	int ret;
 	float value=0.0;
 	int bufsize=0;
-
+	
 	if(size==0){
 		ret=am_getconfig_float("libplayer.ffmpeg.lpbufsizemax",&value);
 		if(ret<0 || value < 1024*32)
@@ -155,6 +156,15 @@ int url_lpopen(URLContext *s,int size)
 	if(lp->cache_id!=0)
 		lp->cache_enable=1;
 	lp_bprint( AV_LOG_INFO,"url_lpopen4%d\n",bufsize);
+
+	ret=am_getconfig_float("libplayer.ffmpeg.maxreadseek",&value);
+	if(ret>=0 && value>=0)
+	{
+		lp->max_read_seek=value;
+	}else
+	{
+		lp->max_read_seek=DEF_MAX_READ_SEEK;
+	}
 	return 0;
 }
 
@@ -222,12 +232,16 @@ int url_lpfillbuffer(URLContext *s,int size)
 		if(lp->file_size>0 && lp->pos>=lp->file_size){
 			rlen=0;/*file read end*/
 			goto release;
-		}else if(lp->cache_enable && s->prot->url_seek(s,0,SEEK_CUR)!=lp->pos){/*maybe do read from cache file before,so seek it now*/
-			int ret=s->prot->url_seek(s,lp->pos,SEEK_SET);
-			if(ret!=lp->pos){
-				rlen=-1;/*error*/
-				goto release;
-			}	
+		}else if(lp->cache_enable ){
+                       /*maybe do read from cache file before,so seek it now*/
+                       int64_t lowlevelpos=s->prot->url_seek(s,0,SEEK_CUR);
+                       if(lowlevelpos>0 && lowlevelpos!=lp->pos){
+                               int ret=s->prot->url_seek(s,lp->pos,SEEK_SET);
+                               if(ret!=lp->pos){
+                                       rlen=-1;/*error*/
+                                       goto release;
+                               }
+                       }
 		}
 		tmprp=lp->pos;
 		lp_unlock(&lp->mutex);/*release lock for long time read*/
@@ -375,7 +389,6 @@ int64_t url_lpseek(URLContext *s, int64_t offset, int whence)
 	else
 		valid_data_can_seek_forward=lp->buffer_size-(lp->rp-lp->wp);
 	pos_on_read = lp->pos-valid_data_can_seek_forward;
- 	
 	if(whence == SEEK_CUR)
 	{
 		offset1 = pos_on_read;
@@ -408,8 +421,9 @@ int64_t url_lpseek(URLContext *s, int64_t offset, int whence)
 		
 	}else if( (s->is_streamed && offset1>0) || /*can't suport seek,and can support read seek.*/
 			((offset1>0 &&  s->is_slowmedia) && 	/*is slowmedia and seek formard*/
-			(offset1<lp->buffer_size-lp->block_read_size && offset1<MAX_READ_SEEK) &&/*don't do too big size seek*/ 
-			(lp->file_size<=0 || (lp->file_size>0 && offset1<lp->file_size/2))))/*if offset1>filesize/2,thendo first seek end,don't buffer*/
+			(offset1<lp->buffer_size-lp->block_read_size && offset1<=lp->max_read_seek) &&/*don't do too big size seek*/ 
+			(lp->file_size<=0 || (lp->file_size>0 && offset1<lp->file_size/2)) &&/*if offset1>filesize/2,thendo first seek end,don't buffer*/
+			(offset1<=((lp->seekflags&LESS_READ_SEEK)?lp->max_read_seek/16:lp->max_read_seek))))/*do less readseek,if have less seek flags*/
 	{/*seek to buffer end,but buffer is not full,do read seek*/
 		int read_offset,ret;
 		lp_sprint( AV_LOG_INFO, "url_lpseek:buffer read seek forward offset=%lld offset1=%lld  whence=%d\n",offset,offset1,whence);
@@ -490,9 +504,34 @@ int64_t url_lpexseek(URLContext *s, int64_t offset, int whence)
 	 	}
 		ret= AVERROR(EPIPE);
 	}
+      else if (whence == AVSEEK_SLICE_BYTIME)
+      {
+               ret= s->prot->url_seek(s, offset, AVSEEK_SLICE_BYTIME);
+               if (ret < 0){
+                    lp_unlock(&lp->mutex);
+                    return -1;
+               }
+               lp_unlock(&lp->mutex);
+               return ret;
+       }
 seek_end:
 	lp_unlock(&lp->mutex);
 	return ret;
+}
+int url_lpreset(URLContext *s)
+ {   
+      url_lpbuf_t *lp;
+      if(!s || !s->lpbuf){
+            return AVERROR(EINVAL);
+      }
+       lp=s->lpbuf;
+       if(lp){
+           lp->rp=lp->buffer;
+            lp->wp=lp->buffer;
+            lp->pos=0;
+            lp->valid_data_size=0;
+       }
+       return 0;
 }
 
 int url_lp_getbuffering_size(URLContext *s,int *forward_data,int *back_data)
@@ -523,6 +562,25 @@ int url_lp_getbuffering_size(URLContext *s,int *forward_data,int *back_data)
 	if(back_data)	
 		*back_data=valid_data_can_seek_back;
 	return (valid_data_can_seek_back+valid_data_can_seek_forward);
+}
+
+int url_lp_set_seekflags(URLContext *s,int seekflagmask)
+{
+	url_lpbuf_t *lp;
+	if(!s || !s->lpbuf)
+		return AVERROR(EINVAL);
+	lp=s->lpbuf;
+	lp->seekflags|=seekflagmask;
+	return 0;
+}
+int url_lp_clear_seekflags(URLContext *s,int seekflagmask)
+{
+	url_lpbuf_t *lp;
+	if(!s || !s->lpbuf)
+		return AVERROR(EINVAL);
+	lp=s->lpbuf;
+	lp->seekflags&=~seekflagmask;
+	return 0;
 }
 
 

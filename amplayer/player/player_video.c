@@ -31,6 +31,11 @@ static int stream_video_init(play_para_t *p_para)
     }
     codec->stream_type = stream_type_convert(p_para->stream_type, codec->has_video, codec->has_audio);
     codec->noblock = !!p_para->buffering_enable;
+    if (vinfo->video_format == VFORMAT_AVS) {
+        codec->am_sysinfo.height  = vinfo->video_height;
+        codec->am_sysinfo.width   = vinfo->video_width;
+        codec->am_sysinfo.rate    = vinfo->video_rate;
+    }
     ret = codec_init(codec);
     if (ret != CODEC_ERROR_NONE) {
         if (ret != CODEC_OPEN_HANDLE_FAILED) {

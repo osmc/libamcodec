@@ -124,13 +124,13 @@ out:
 
 
 
-static int cachefile_alloc_mgtfile_name(char *name, const char *dir, const char *url, int size)
+static int cachefile_alloc_mgtfile_name(char *name, const char *dir, const char *url, int size, int flags)
 {
-    sprintf(name, "%s/" CACHE_NAME_PREFIX "%08x_%08x.cache", dir, do_csum((unsigned char *)url, strlen(url)), size);
+    sprintf(name, "%s/" CACHE_NAME_PREFIX "%08x_%08x_%04x.cache", dir, do_csum((unsigned char *)url, strlen(url)), size, flags);
     return 0;
 }
 
-static int cachefile_alloc_cachefile_name(char *name, const char *dir, const char *url, int size)
+static int cachefile_alloc_cachefile_name(char *name, const char *dir, const char *url, int size, int flags)
 {
     const char *pfile;
     //http://linux.chinaunix.net/techdoc/net/2009/05/03/1109885.shtml
@@ -144,28 +144,28 @@ static int cachefile_alloc_cachefile_name(char *name, const char *dir, const cha
     if (strlen(pfile) >= 16) {
         pfile = pfile + (strlen(pfile) - 16);    /*only save the last 16 bytes name*/
     }
-    sprintf(name, "%s/" CACHE_NAME_PREFIX "%08x_%08x_%s", dir, do_csum((unsigned char *)url, strlen(url)), size, pfile);
+    sprintf(name, "%s/" CACHE_NAME_PREFIX "%08x_%08x_%s_%04x.dat", dir, do_csum((unsigned char *)url, strlen(url)), size, pfile, flags);
     return 0;
 }
-int cachefile_has_cached_currentfile(const char *dir, const char *url, int size)
+int cachefile_has_cached_currentfile(const char *dir, const char *url, int size, int flags)
 {
-	struct stat stat;
-	char filename[256];
-	int ret;
-	
-	cachefile_alloc_mgtfile_name(filename,dir,url,size);
-	ret=lstat(filename, &stat) ;
-	lp_ciprint("has name %s,%d,%d\n",filename,ret,stat.st_size);
-	if(ret == 0 && stat.st_size>=sizeof(struct cache_file_header)){
-		cachefile_alloc_cachefile_name(filename,dir,url,size);
-		ret=lstat(filename, &stat);
-		lp_ciprint("has name %s,%d,%d\n",filename,ret,stat.st_size);
-		if(ret== 0 && stat.st_size>=size-CACHE_PAGE_SIZE*10){
-			lp_ciprint("have valid cache file before");
-			return 1;
-		}
-	}
-	return 0;
+    struct stat stat;
+    char filename[256];
+    int ret;
+
+    cachefile_alloc_mgtfile_name(filename, dir, url, size, flags);
+    ret = lstat(filename, &stat) ;
+    lp_ciprint("has name %s,%d,%d\n", filename, ret, stat.st_size);
+    if (ret == 0 && stat.st_size >= sizeof(struct cache_file_header)) {
+        cachefile_alloc_cachefile_name(filename, dir, url, size, flags);
+        ret = lstat(filename, &stat);
+        lp_ciprint("has name %s,%d,%d\n", filename, ret, stat.st_size);
+        if (ret == 0 && stat.st_size >= size - CACHE_PAGE_SIZE * 10) {
+            lp_ciprint("have valid cache file before");
+            return 1;
+        }
+    }
+    return 0;
 }
 
 int cachefile_is_cache_filename(const char *name)
@@ -396,7 +396,7 @@ int cachefile_mgt_file_write(struct cache_file * cache)
 struct cache_file * cachefile_open(const char *url, const char *dir, int64_t size, int flags) {
     struct cache_file *cache;
     struct stat stat;
-    if (size > 500 * 1024 * 1024 || size < 1 * 1024 * 1024) { /*don't cache too big file and too small size file*/
+    if (size > 1024 * 1024 * 1024 || size < (4 << CACHE_PAGE_SIZE)) { /*don't cache too big file and too small size file*/
         return NULL;
     }
     cache = malloc(sizeof(struct cache_file));
@@ -408,8 +408,8 @@ struct cache_file * cachefile_open(const char *url, const char *dir, int64_t siz
     cache->file_size = size;
     lp_ciprint("cachefile_open:%s-%lld\n", url, size);
     cache->url_checksum = do_csum((unsigned char*)cache->url, strlen(cache->url));
-    cachefile_alloc_mgtfile_name(cache->cache_mgtname, dir, cache->url, cache->file_size);
-    cachefile_alloc_cachefile_name(cache->cache_filename, dir, cache->url, cache->file_size);
+    cachefile_alloc_mgtfile_name(cache->cache_mgtname, dir, cache->url, cache->file_size, flags);
+    cachefile_alloc_cachefile_name(cache->cache_filename, dir, cache->url, cache->file_size, flags);
     cache->mgt_fd = open(cache->cache_mgtname, O_CREAT | O_RDWR, 0770);
     if (cache->mgt_fd < 0) {
         lp_ceprint("open cache_mgtname:%s failed(%s)\n", cache->cache_mgtname, strerror(cache->mgt_fd));
@@ -435,8 +435,8 @@ struct cache_file * cachefile_open(const char *url, const char *dir, int64_t siz
         */
 
     }
-	lseek(cache->file_fd,size,SEEK_SET);/*enlarge the file size*/
-	lseek(cache->file_fd,0,SEEK_SET);
+    lseek(cache->file_fd, size, SEEK_SET); /*enlarge the file size*/
+    lseek(cache->file_fd, 0, SEEK_SET);
     return cache;
 error:
     if (cache && cache->file_fd > 0) {

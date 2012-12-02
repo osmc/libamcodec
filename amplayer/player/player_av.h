@@ -13,12 +13,20 @@ typedef int CODEC_TYPE;
 #define CODEC_SUBTITLE        (4)
 
 #define RW_WAIT_TIME        (20 * 1000) //20ms
+#define SUBTITLE_SIZE		(1024*1024*4)
 #define AUDIO_WRITE_SIZE_PER_TIME 1024*10  //used for ape
 
 typedef struct hdr_buf {
     char *data;
     int size;
 } hdr_buf_t;
+typedef struct es_sub{
+	int subid;
+	int rdp;
+	int wrp;
+	int size;
+	char *sub_buf;
+}es_sub_t;
 
 typedef struct am_packet {
     CODEC_TYPE type;

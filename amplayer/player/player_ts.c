@@ -14,7 +14,7 @@ static int stream_ts_init(play_para_t *p_para)
     v_stream_info_t *vinfo = &p_para->vstream_info;
     a_stream_info_t *ainfo = &p_para->astream_info;
     s_stream_info_t *sinfo = &p_para->sstream_info;
-	AVCodecContext  *pCodecCtx;
+    AVCodecContext  *pCodecCtx;
     codec_para_t *codec ;
     int ret = CODEC_ERROR_NONE;
 
@@ -33,7 +33,13 @@ static int stream_ts_init(play_para_t *p_para)
             codec->am_sysinfo.format = vinfo->video_codec_type;
             codec->am_sysinfo.width = vinfo->video_width;
             codec->am_sysinfo.height = vinfo->video_height;
-        } else if (codec->video_type == VFORMAT_VC1) {
+            codec->am_sysinfo.rate = vinfo->video_rate;
+            if (p_para->pFormatCtx->pb && p_para->pFormatCtx->pb->is_slowmedia) {
+                /* ts slow media, use idr framerate */
+                log_print("[%s:%d]Slow media detected for ts\n", __FUNCTION__, __LINE__);
+                codec->am_sysinfo.param = USE_IDR_FRAMERATE;
+            }
+        } else if (codec->video_type == VFORMAT_VC1 || codec->video_type == VFORMAT_AVS) {
             codec->am_sysinfo.format = vinfo->video_codec_type;
             codec->am_sysinfo.width = vinfo->video_width;
             codec->am_sysinfo.height = vinfo->video_height;
@@ -46,12 +52,12 @@ static int stream_ts_init(play_para_t *p_para)
         codec->audio_pid = ainfo->audio_pid;
         codec->audio_channels = ainfo->audio_channel;
         codec->audio_samplerate = ainfo->audio_samplerate;
-		pCodecCtx = p_para->pFormatCtx->streams[p_para->astream_info.audio_index]->codec;	
+        pCodecCtx = p_para->pFormatCtx->streams[p_para->astream_info.audio_index]->codec;
         /*if ((codec->audio_type == AFORMAT_ADPCM) || (codec->audio_type == AFORMAT_WMA)
             || (codec->audio_type == AFORMAT_WMAPRO) || (codec->audio_type == AFORMAT_PCM_S16BE)
             || (codec->audio_type == AFORMAT_PCM_S16LE) || (codec->audio_type == AFORMAT_PCM_U8)
             || (codec->audio_type == AFORMAT_PCM_BLURAY)||(codec->audio_type == AFORMAT_AMR)) {*/
-          if(IS_AUIDO_NEED_EXT_INFO(codec->audio_type)){
+        if (IS_AUIDO_NEED_EXT_INFO(codec->audio_type)) {
             codec->audio_info.bitrate = pCodecCtx->sample_fmt;
             codec->audio_info.sample_rate = pCodecCtx->sample_rate;
             codec->audio_info.channels = pCodecCtx->channels;
@@ -59,21 +65,20 @@ static int stream_ts_init(play_para_t *p_para)
             codec->audio_info.block_align = pCodecCtx->block_align;
             codec->audio_info.extradata_size = pCodecCtx->extradata_size;
             if (codec->audio_info.extradata_size > 0) {
-		     if(codec->audio_info.extradata_size > 	AUDIO_EXTRA_DATA_SIZE)
-		     {
-	      			log_print("[%s:%d],extra data size exceed max  extra data buffer,cut it to max buffer size ", __FUNCTION__, __LINE__);
-				codec->audio_info.extradata_size = 	AUDIO_EXTRA_DATA_SIZE;
-	  	     }
+                if (codec->audio_info.extradata_size >  AUDIO_EXTRA_DATA_SIZE) {
+                    log_print("[%s:%d],extra data size exceed max  extra data buffer,cut it to max buffer size ", __FUNCTION__, __LINE__);
+                    codec->audio_info.extradata_size =  AUDIO_EXTRA_DATA_SIZE;
+                }
                 memcpy((char*)codec->audio_info.extradata, pCodecCtx->extradata, codec->audio_info.extradata_size);
             }
             codec->audio_info.valid = 1;
 
         }
-	 codec->avsync_threshold = p_para->start_param->avsync_threshold;
-     	 log_print("[%s:%d]audio bitrate=%d sample_rate=%d channels=%d codec_id=%x block_align=%d,extra size\n",
+        codec->avsync_threshold = p_para->start_param->avsync_threshold;
+        log_print("[%s:%d]audio bitrate=%d sample_rate=%d channels=%d codec_id=%x block_align=%d,extra size\n",
                   __FUNCTION__, __LINE__, codec->audio_info.bitrate, codec->audio_info.sample_rate, codec->audio_info.channels,
-                  codec->audio_info.codec_id, codec->audio_info.block_align,codec->audio_info.extradata_size);
-       }
+                  codec->audio_info.codec_id, codec->audio_info.block_align, codec->audio_info.extradata_size);
+    }
     if (sinfo->has_sub) {
         codec->has_sub = 1;
         codec->sub_pid = sinfo->sub_pid;

@@ -377,7 +377,10 @@ static int mov_read_default(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
     if (total_size < atom.size && atom.size < 0x7ffff)
         avio_skip(pb, atom.size - total_size);
-
+   if (url_interrupt_cb()) {
+        av_log(NULL, AV_LOG_WARNING, "mov_read_default interrupt, exit\n");
+        return AVERROR_EXIT;
+    }
     return 0;
 }
 
@@ -1557,6 +1560,11 @@ static int mov_read_stts(MOVContext *c, AVIOContext *pb, MOVAtom atom)
 
         duration+=(int64_t)sample_duration*sample_count;
         total_sample_count+=sample_count;
+
+	 if(url_interrupt_cb()) {
+	     av_log(NULL, AV_LOG_WARNING, "mov_read_stts interrupt, exit\n");
+	     return AVERROR_EXIT;
+         }	
     }
 
     st->nb_frames= total_sample_count;
@@ -1597,6 +1605,10 @@ static int mov_read_ctts(MOVContext *c, AVIOContext *pb, MOVAtom atom)
         sc->ctts_data[i].duration= duration;
         if (duration < 0 && i+1<entries)
             sc->dts_shift = FFMAX(sc->dts_shift, -duration);
+	 if(url_interrupt_cb()) {
+	     av_log(NULL, AV_LOG_WARNING, "mov_read_stts interrupt, exit\n");
+	     return AVERROR_EXIT;
+         }		
     }
 
     av_dlog(c->fc, "dts shift %d\n", sc->dts_shift);

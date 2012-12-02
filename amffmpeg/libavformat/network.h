@@ -81,11 +81,11 @@ static inline int ff_network_wait_fd(int fd, int write)
     int ev = write ? POLLOUT : POLLIN;
     struct pollfd p = { .fd = fd, .events = ev, .revents = 0 };
     int ret=0;
-	int retry=10; ///10*100ms=1S;
+	int retry=5; ///5*50ms=250ms;
 	do{
-		if(url_interrupt_cb())
+		if(retry<5  && url_interrupt_cb()) /*at lest try 5 times, for some teardown command*/
 			return AVERROR_EXIT;
-    	ret = poll(&p, 1, 100);/*100ms*/
+    	ret = poll(&p, 1, 50);/*50ms*/
 		if(ret!=0)
 			break;/*fd ready or errors*/
 		if(p.revents & (ev | POLLERR | POLLHUP))

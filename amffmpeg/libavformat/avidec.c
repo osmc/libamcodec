@@ -587,11 +587,11 @@ static int avi_read_header(AVFormatContext *s, AVFormatParameters *ap)
             switch(tag1) {
             case MKTAG('v', 'i', 'd', 's'):
                 codec_type = AVMEDIA_TYPE_VIDEO;
-
                 ast->sample_size = 0;
                 break;
             case MKTAG('a', 'u', 'd', 's'):
                 codec_type = AVMEDIA_TYPE_AUDIO;
+                ast->sample_size = 0;
                 break;
             case MKTAG('t', 'x', 't', 's'):
                 codec_type = AVMEDIA_TYPE_SUBTITLE;
@@ -685,7 +685,15 @@ static int avi_read_header(AVFormatContext *s, AVFormatParameters *ap)
                             memcpy(st->codec->extradata + st->codec->extradata_size - 9, "BottomUp", 9);
                     }
                     st->codec->height= FFABS(st->codec->height);
-
+                    
+                    /* patched for WVC1, do NOT use extra data if biBitCount unavailable
+                     * we got a file with bits_per_coded_sample equals 0
+                     */
+                    if(tag1 == MKTAG('W', 'V', 'C', '1') && (st->codec->bits_per_coded_sample <= 0) && st->codec->extradata_size)
+                    {
+                        s->skip_extradata = 1;
+                        av_log(s, AV_LOG_ERROR, "tell player not to send header size\n");
+                    }
 //                    avio_skip(pb, size - 5 * 4);
                     break;
                 case AVMEDIA_TYPE_AUDIO:

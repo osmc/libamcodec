@@ -51,5 +51,5 @@ enum AVSampleFormat {
     AV_SAMPLE_FMT_DBL,         ///< double
     AV_SAMPLE_FMT_NB           ///< Number of sample formats. DO NOT USE if linking dynamically
 };
-#define AVCODEC_MAX_AUDIO_FRAME_SIZE 192000
+#define AVCODEC_MAX_AUDIO_FRAME_SIZE 500*1024
 #endif

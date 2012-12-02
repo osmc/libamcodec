@@ -20,6 +20,8 @@
 
 #ifdef ANDROID
 #include <cutils/properties.h>
+#else
+#define PROPERTY_VALUE_MAX 92
 #endif
 
 /**
@@ -69,6 +71,7 @@ audio_type_t audio_type[] = {
     {ACODEC_FMT_AAC_LATM, "aac_latm"},
     {ACODEC_FMT_APE, "ape"},
     {ACODEC_FMT_MPEG, "mp3"},
+    {ACODEC_FMT_NULL, "null"},
 };
 
 static int audio_decoder = AUDIO_ARC_DECODER;
@@ -260,12 +263,14 @@ static void adec_flag_check(aml_audio_dec_t *audec)
 {
     audio_out_operations_t *aout_ops = &audec->aout_ops;
 
-    if (audec->auto_mute && (audec->state > INITTED)) {
+    if (audec->auto_mute && (audec->state > INITTED) &&(audec->state != PAUSED)) {
         aout_ops->pause(audec);
+        adec_print("automute, puase audio out!\n");
         while ((!audec->need_stop) && track_switch_pts(audec)) {
             usleep(1000);
         }
         aout_ops->resume(audec);
+        adec_print("resume audio out, automute invalid\n");
         audec->auto_mute = 0;
     }
 }
@@ -341,6 +346,7 @@ static void *adec_message_loop(void *args)
         //  usleep(100000);
         //  continue;
         //}
+        adec_reset_track(audec);
         adec_flag_check(audec);
 
         msg = adec_get_message(audec);
@@ -815,7 +821,6 @@ static int set_audio_decoder(codec_para_t *pcodec)
 static int set_audio_decoder(int codec_id)
 {
 	int audio_id;
-#ifdef ANDROID
 	int i;	
     int num;
 	int ret;
@@ -856,7 +861,7 @@ static int set_audio_decoder(int codec_id)
 		audio_decoder = AUDIO_FFMPEG_DECODER;
 		return 0;
 	} 
-#endif	
+	
 	audio_decoder = AUDIO_ARC_DECODER; //set arc decoder as default
 	return 0;
 }
@@ -896,7 +901,7 @@ int audiodec_init(aml_audio_dec_t *audec)
     get_output_func(audec);
     int nCodecType=audec->format;
     set_audio_decoder(nCodecType);
-
+    audec->format_changed_flag=0;
     if (get_audio_decoder() == AUDIO_ARC_DECODER) {
     		audec->adsp_ops.dsp_file_fd = -1;
 		ret = pthread_create(&tid, NULL, (void *)adec_message_loop, (void *)audec);

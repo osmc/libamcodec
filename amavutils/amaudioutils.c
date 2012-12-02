@@ -22,6 +22,14 @@ typedef enum
 #define	AUDIODSP_CODEC_MIPS_OUT "/sys/devices/system/cpu/cpu0/cpufreq/scaling_min_freq"
 #define AUDIODSP_CLK81_FRQ_LEVEL "/sys/class/aml_clk81/clk81_freq_level"
 
+#ifndef LOGD
+    #define LOGV ALOGV
+    #define LOGD ALOGD
+    #define LOGI ALOGI
+    #define LOGW ALOGW
+    #define LOGE ALOGE
+#endif
+
 #define LOG_FUNCTION_NAME LOGI("%s-%d\n",__FUNCTION__,__LINE__);
 ///#define LOG_FUNCTION_NAME
 

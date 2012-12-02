@@ -57,6 +57,7 @@ typedef enum {
     AFORMAT_VORBIS    = 18,
     AFORMAT_AAC_LATM   = 19,
     AFORMAT_APE   = 20,
+	AFORMAT_EAC3   = 21,   
     AFORMAT_UNSUPPORT ,
     AFORMAT_MAX    
 
@@ -75,13 +76,14 @@ typedef enum {
 								 ||(afmt == AFORMAT_AMR)\
 								 ||(afmt == AFORMAT_ALAC)\
 								 ||(afmt == AFORMAT_AC3) \
+								 ||(afmt == AFORMAT_EAC3) \								 
 								 ||(afmt == AFORMAT_APE) \
 								 ||(afmt == AFORMAT_FLAC) )
 
 
 #define IS_AUDIO_NOT_SUPPORT_EXCEED_2CH(afmt) ((afmt == AFORMAT_RAAC) \
 										||(afmt == AFORMAT_COOK) \
-										||(afmt == AFORMAT_FLAC))
+										/*||(afmt == AFORMAT_FLAC)*/)
 
 #define IS_AUIDO_NEED_PREFEED_HEADER(afmt) ((afmt == AFORMAT_VORBIS) )
 

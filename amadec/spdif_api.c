@@ -255,6 +255,22 @@ int iec958_packed_frame_write_958buf(char *buf,int frame_size)
 	}		
 	return 0;
 }
+int iec958buf_fill_zero()
+{
+   int zero_filled_cnt=0,i2s_status=0,write_ret=0;
+   char zerobuf[2048]={0};
+   ioctl(dev_fd, AUDIO_SPDIF_GET_I2S_ENABLE_STATUS, &i2s_status);
+   while((zero_filled_cnt<iec958_buffer_size) && i2s_status )
+   {
+       write_ret=iec958_packed_frame_write_958buf(zerobuf,2048);
+	   if(write_ret)
+	     break;
+	   zero_filled_cnt+=2048;
+	   ioctl(dev_fd, AUDIO_SPDIF_GET_I2S_ENABLE_STATUS, &i2s_status);
+   }
+   return 0;
+
+}
 /*
 	@return 0:means 958 hw buffer maybe underrun,may need fill zero data 
 	@return 1:means 958 hw buffer level is fine 

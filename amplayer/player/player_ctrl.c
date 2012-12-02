@@ -40,20 +40,20 @@ extern void print_version_info();
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function	player_init
+ * @function    player_init
  *
- * @brief  		Amlogic player initilization. Make sure call it once when
- *				setup amlogic player every time
- * @param		void
+ * @brief       Amlogic player initilization. Make sure call it once when
+ *              setup amlogic player every time
+ * @param       void
  *
- * @return 		PLAYER_SUCCESS   success
+ * @return      PLAYER_SUCCESS   success
  *
- * @details 	register all formats and codecs;
- *				player id pool initilization;
- *				audio basic initilization;
- *				register support decoder(ts,es,rm,pure audio, pure video);
- *				keep last frame displaying for default;
- *				enable demux and set demux channel;            
+ * @details     register all formats and codecs;
+ *              player id pool initilization;
+ *              audio basic initilization;
+ *              register support decoder(ts,es,rm,pure audio, pure video);
+ *              keep last frame displaying for default;
+ *              enable demux and set demux channel;
  */
 /* --------------------------------------------------------------------------*/
 
@@ -61,38 +61,38 @@ int player_init(void)
 {
     print_version_info();
     update_loglevel_setting();
-	/*register all formats and codecs*/
+    /*register all formats and codecs*/
     ffmpeg_init();
 
     player_id_pool_init();
 
     codec_audio_basic_init();
-	
+
     /*register all support decoder */
     ts_register_stream_decoder();
     es_register_stream_decoder();
     ps_register_stream_decoder();
     rm_register_stream_decoder();
     audio_register_stream_decoder();
-    video_register_stream_decoder();    
-	
+    video_register_stream_decoder();
+
     return PLAYER_SUCCESS;
 }
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	player_start
+ * @function    player_start
  *
- * @brief      	Amlogic player start to play a specified path streaming file.	
+ * @brief       Amlogic player start to play a specified path streaming file.
  *
- * @param[in]  	ctrl_p  player control parameters structure pointer
- * @param[in]  	priv    Player unique identification
+ * @param[in]   ctrl_p  player control parameters structure pointer
+ * @param[in]   priv    Player unique identification
  *
- * @return 	   	pid  current player tag
+ * @return      pid  current player tag
  *
- * @details		request id for current player;
- *				if not set displast_frame, or change file ,set black out;
- *				creat player thread for playback;				
+ * @details     request id for current player;
+ *              if not set displast_frame, or change file ,set black out;
+ *              creat player thread for playback;
  */
 /* --------------------------------------------------------------------------*/
 int player_start(play_control_t *ctrl_p, unsigned long  priv)
@@ -100,25 +100,25 @@ int player_start(play_control_t *ctrl_p, unsigned long  priv)
     int ret;
     int pid = -1;
     play_para_t *p_para;
-    //char stb_source[32];      
-    
+    //char stb_source[32];
+
     update_loglevel_setting();
     print_version_info();
     log_print("[player_start:enter]p=%p black=%d\n", ctrl_p, get_black_policy());
 
     if (ctrl_p == NULL) {
         return PLAYER_EMPTY_P;
-    }    
-    
-	/*keep last frame displaying --default*/
+    }
+
+    /*keep last frame displaying --default*/
     set_black_policy(0);
-	/* if not set keep last frame, or change file playback, clear display last frame */
-	if (!ctrl_p->displast_frame) {
-		set_black_policy(1);            
-	} else if (!check_file_same(ctrl_p->file_name)) {
-		set_black_policy(1);                    
-	}
-	
+    /* if not set keep last frame, or change file playback, clear display last frame */
+    if (!ctrl_p->displast_frame) {
+        set_black_policy(1);
+    } else if (!check_file_same(ctrl_p->file_name)) {
+        set_black_policy(1);
+    }
+
     pid = player_request_pid();
     if (pid < 0) {
         return PLAYER_NOT_VALID_PID;
@@ -156,17 +156,17 @@ int player_start(play_control_t *ctrl_p, unsigned long  priv)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	player_start_play
+ * @function    player_start_play
  *
- * @brief   	if need_start set 1, call player_start_play to start playback
+ * @brief       if need_start set 1, call player_start_play to start playback
  *
  * @param[in]   pid player tag which get from player_start return value
  *
- * @return 		PLAYER_NOT_VALID_PID playet tag invalid
- *          	PLAYER_NOMEM        alloc memory failed
- *          	PLAYER_SUCCESS      success
+ * @return      PLAYER_NOT_VALID_PID playet tag invalid
+ *              PLAYER_NOMEM        alloc memory failed
+ *              PLAYER_SUCCESS      success
  *
- * @details   	if need_start set 0, no need call player_start_play
+ * @details     if need_start set 0, no need call player_start_play
  */
 /* --------------------------------------------------------------------------*/
 int player_start_play(int pid)
@@ -198,18 +198,18 @@ int player_start_play(int pid)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	player_stop
+ * @function    player_stop
  *
- * @brief   	send stop command to player (synchronous)
+ * @brief       send stop command to player (synchronous)
  *
  * @param[in]   pid player tag which get from player_start return value
  *
- * @return  	PLAYER_NOT_VALID_PID    playet tag invalid
- *          	PLAYER_NOMEM            alloc memory failed
- *          	PLAYER_SUCCESS          success
+ * @return      PLAYER_NOT_VALID_PID    playet tag invalid
+ *              PLAYER_NOMEM            alloc memory failed
+ *              PLAYER_SUCCESS          success
  *
  * @details     if player already stop, return directly
- *				wait thread exit after send stop command
+ *              wait thread exit after send stop command
  */
 /* --------------------------------------------------------------------------*/
 int player_stop(int pid)
@@ -217,20 +217,20 @@ int player_stop(int pid)
     player_cmd_t *cmd;
     int r = PLAYER_SUCCESS;
     play_para_t *player_para;
-	player_status sta;
+    player_status sta;
 
     log_print("[player_stop:enter]pid=%d\n", pid);
 
     player_para = player_open_pid_data(pid);
     if (player_para == NULL) {
         return PLAYER_NOT_VALID_PID;
-    }    
+    }
 
-	sta = get_player_state(player_para);
-	log_print("[player_stop]player_status=%x\n", sta);
-	if (PLAYER_THREAD_IS_STOPPED(sta)) {
-		player_close_pid_data(pid);
-		log_print("[player_stop]pid=%d thread is already stopped\n", pid);
+    sta = get_player_state(player_para);
+    log_print("[player_stop]player_status=%x\n", sta);
+    if (PLAYER_THREAD_IS_STOPPED(sta)) {
+        player_close_pid_data(pid);
+        log_print("[player_stop]pid=%d thread is already stopped\n", pid);
         return PLAYER_SUCCESS;
     }
     /*if (player_para->pFormatCtx) {
@@ -258,38 +258,38 @@ int player_stop(int pid)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	player_stop_async
+ * @function    player_stop_async
  *
- * @brief   	send stop command to player (asynchronous)
+ * @brief       send stop command to player (asynchronous)
  *
  * @param[in]   pid player tag which get from player_start return value
  *
- * @return  	PLAYER_NOT_VALID_PID    playet tag invalid
- *          	PLAYER_NOMEM            alloc memory failed
- *          	PLAYER_SUCCESS          success
+ * @return      PLAYER_NOT_VALID_PID    playet tag invalid
+ *              PLAYER_NOMEM            alloc memory failed
+ *              PLAYER_SUCCESS          success
  *
- * @details 	if player already stop, return directly
- *				needn't wait thread exit
+ * @details     if player already stop, return directly
+ *              needn't wait thread exit
  */
 /* --------------------------------------------------------------------------*/
 int player_stop_async(int pid)
 {
     player_cmd_t *cmd;
     int r = PLAYER_SUCCESS;
-    play_para_t *player_para;	
-	player_status sta;
-	
+    play_para_t *player_para;
+    player_status sta;
+
     player_para = player_open_pid_data(pid);
 
     if (player_para == NULL) {
         return PLAYER_NOT_VALID_PID;
-    } 
-	
-	sta = get_player_state(player_para);
-	log_print("[player_stop]player_status=%x\n", sta);
-	if (PLAYER_THREAD_IS_STOPPED(sta)) {
-		player_close_pid_data(pid);
-		log_print("[player_stop]pid=%d thread is already stopped\n", pid);
+    }
+
+    sta = get_player_state(player_para);
+    log_print("[player_stop]player_status=%x\n", sta);
+    if (PLAYER_THREAD_IS_STOPPED(sta)) {
+        player_close_pid_data(pid);
+        log_print("[player_stop]pid=%d thread is already stopped\n", pid);
         return PLAYER_SUCCESS;
     }
     cmd = message_alloc();
@@ -311,17 +311,17 @@ int player_stop_async(int pid)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	player_exit
+ * @function    player_exit
  *
- * @brief   	release player resource
+ * @brief       release player resource
  *
  * @param[in]   pid player tag which get from player_start return value
  *
- * @return  	PLAYER_NOT_VALID_PID    playet tag invalid
- *          	PLAYER_NOMEM            alloc memory failed
- *          	PLAYER_SUCCESS          success
+ * @return      PLAYER_NOT_VALID_PID    playet tag invalid
+ *              PLAYER_NOMEM            alloc memory failed
+ *              PLAYER_SUCCESS          success
  *
- * @details 	player_exit must with pairs of player_play
+ * @details     player_exit must with pairs of player_play
  */
 /* --------------------------------------------------------------------------*/
 int player_exit(int pid)
@@ -353,17 +353,17 @@ int player_exit(int pid)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	player_pause
+ * @function    player_pause
  *
- * @brief   	send pause command to player
+ * @brief       send pause command to player
  *
  * @param[in]   pid player tag which get from player_start return value
  *
- * @return  	PLAYER_NOT_VALID_PID    playet tag invalid
- *          	PLAYER_NOMEM            alloc memory failed
- *          	PLAYER_SUCCESS          success
+ * @return      PLAYER_NOT_VALID_PID    playet tag invalid
+ *              PLAYER_NOMEM            alloc memory failed
+ *              PLAYER_SUCCESS          success
  *
- * @details 	null
+ * @details     null
  */
 /* --------------------------------------------------------------------------*/
 int player_pause(int pid)
@@ -385,17 +385,17 @@ int player_pause(int pid)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function	player_resume
+ * @function    player_resume
  *
- * @brief   	send resume command to player
+ * @brief       send resume command to player
  *
  * @param[in]   pid player tag which get from player_start return value
  *
- * @return  	PLAYER_NOT_VALID_PID    playet tag invalid
- *          	PLAYER_NOMEM            alloc memory failed
- *          	PLAYER_SUCCESS          success
+ * @return      PLAYER_NOT_VALID_PID    playet tag invalid
+ *              PLAYER_NOMEM            alloc memory failed
+ *              PLAYER_SUCCESS          success
  *
- * @details 	null
+ * @details     null
  */
 /* --------------------------------------------------------------------------*/
 int player_resume(int pid)
@@ -417,17 +417,17 @@ int player_resume(int pid)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function	player_loop
+ * @function    player_loop
  *
- * @brief   	send loop command to set loop play current file
+ * @brief       send loop command to set loop play current file
  *
  * @param[in]   pid player tag which get from player_start return value
  *
- * @return  	PLAYER_NOT_VALID_PID    playet tag invalid
- *          	PLAYER_NOMEM            alloc memory failed
- *          	PLAYER_SUCCESS          success
+ * @return      PLAYER_NOT_VALID_PID    playet tag invalid
+ *              PLAYER_NOMEM            alloc memory failed
+ *              PLAYER_SUCCESS          success
  *
- * @details 	need set loop before stream play end
+ * @details     need set loop before stream play end
  */
 /* --------------------------------------------------------------------------*/
 int player_loop(int pid)
@@ -449,15 +449,15 @@ int player_loop(int pid)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	player_noloop
+ * @function    player_noloop
  *
- * @brief   	send noloop command to cancle loop play
+ * @brief       send noloop command to cancle loop play
  *
  * @param[in]   pid player tag which get from player_start return value
  *
- * @return  	PLAYER_NOT_VALID_PID    playet tag invalid
- *          	PLAYER_NOMEM            alloc memory failed
- *          	PLAYER_SUCCESS          success
+ * @return      PLAYER_NOT_VALID_PID    playet tag invalid
+ *              PLAYER_NOMEM            alloc memory failed
+ *              PLAYER_SUCCESS          success
  *
  * @details need cancel loop before stream play end
  */
@@ -482,16 +482,16 @@ int player_noloop(int pid)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	player_timesearch
+ * @function    player_timesearch
  *
- * @brief   	seek to designated time point to play.
+ * @brief       seek to designated time point to play.
  *
  * @param[in]   pid player tag which get from player_start return value
  * @param[in]   s_time target time, unit is second
  *
- * @return  	PLAYER_NOT_VALID_PID    playet tag invalid
- *          	PLAYER_NOMEM            alloc memory failed
- *          	PLAYER_SUCCESS          success
+ * @return      PLAYER_NOT_VALID_PID    playet tag invalid
+ *              PLAYER_NOMEM            alloc memory failed
+ *              PLAYER_SUCCESS          success
  *
  * @details     After time search, player playback from a key frame
  */
@@ -516,16 +516,16 @@ int player_timesearch(int pid, float s_time)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	player_forward
+ * @function    player_forward
  *
- * @brief   	send fastforward command to player
+ * @brief       send fastforward command to player
  *
  * @param[in]   pid     player tag which get from player_start return value
  * @param[in]   speed   fast forward step
  *
- * @return  	PLAYER_NOT_VALID_PID    playet tag invalid
- *          	PLAYER_NOMEM            alloc memory failed
- *          	PLAYER_SUCCESS          success
+ * @return      PLAYER_NOT_VALID_PID    playet tag invalid
+ *              PLAYER_NOMEM            alloc memory failed
+ *              PLAYER_SUCCESS          success
  *
  * @details     After ff, player playback from a key frame
  */
@@ -550,16 +550,16 @@ int player_forward(int pid, int speed)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	player_backward
+ * @function    player_backward
  *
- * @brief   	send fast backward command to player.
+ * @brief       send fast backward command to player.
  *
  * @param[in]   pid     player tag which get from player_start return value
  * @param[in]   speed   fast backward step
  *
- * @return 		PLAYER_NOT_VALID_PID playet tag invalid
- *          	PLAYER_NOMEM        alloc memory failed
- *          	PLAYER_SUCCESS      success
+ * @return      PLAYER_NOT_VALID_PID playet tag invalid
+ *              PLAYER_NOMEM        alloc memory failed
+ *              PLAYER_SUCCESS      success
  *
  * @details     After fb, player playback from a key frame
  */
@@ -584,19 +584,19 @@ int player_backward(int pid, int speed)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	player_aid
+ * @function    player_aid
  *
- * @brief   	switch audio stream to designed id audio stream.
+ * @brief       switch audio stream to designed id audio stream.
  *
  * @param[in]   pid         player tag which get from player_start return value
  * @param[in]   audio_id    target audio stream id,
  *                          can find through media_info command
  *
- * @return  	PLAYER_NOT_VALID_PID    playet tag invalid
- *          	PLAYER_NOMEM            alloc memory failed
- *          	PLAYER_SUCCESS          success
+ * @return      PLAYER_NOT_VALID_PID    playet tag invalid
+ *              PLAYER_NOMEM            alloc memory failed
+ *              PLAYER_SUCCESS          success
  *
- * @details 	audio_id is audio stream index
+ * @details     audio_id is audio stream index
  */
 /* --------------------------------------------------------------------------*/
 int player_aid(int pid, int audio_id)
@@ -620,17 +620,17 @@ int player_aid(int pid, int audio_id)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	player_sid
+ * @function    player_sid
  *
- * @brief   	send switch subtitle id command to player
+ * @brief       send switch subtitle id command to player
  *
  * @param[in]   pid     player tag which get from player_start return value
  * @param[in]   sub_id  target subtitle stream id,
  *                      can find through media_info command
  *
- * @return  	PLAYER_NOT_VALID_PID    playet tag invalid
- *          	PLAYER_NOMEM            alloc memory failed
- *          	PLAYER_SUCCESS          success
+ * @return      PLAYER_NOT_VALID_PID    playet tag invalid
+ *              PLAYER_NOMEM            alloc memory failed
+ *              PLAYER_SUCCESS          success
  *
  * @details     sub_id is subtitle stream index
  */
@@ -656,18 +656,18 @@ int player_sid(int pid, int sub_id)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	player_enable_autobuffer
+ * @function    player_enable_autobuffer
  *
- * @brief   	enable/disable auto buffering
+ * @brief       enable/disable auto buffering
  *
  * @param[in]   pid     player tag which get from player_start return value
  * @param[in]   enable  enable/disable auto buffer function
  *
- * @return  	PLAYER_NOT_VALID_PID    playet tag invalid
- *          	PLAYER_NOMEM            alloc memory failed
- *          	PLAYER_SUCCESS          success
+ * @return      PLAYER_NOT_VALID_PID    playet tag invalid
+ *              PLAYER_NOMEM            alloc memory failed
+ *              PLAYER_SUCCESS          success
  *
- * @details 	if enable auto buffering, need set limit use player_set_autobuffer_level.
+ * @details     if enable auto buffering, need set limit use player_set_autobuffer_level.
  */
 /* --------------------------------------------------------------------------*/
 int player_enable_autobuffer(int pid, int enable)
@@ -700,12 +700,12 @@ int player_enable_autobuffer(int pid, int enable)
  * @param[in]   middle  buffer middle percent(more than middler, exit buffering, av resume)
  * @param[in]   max     buffer max percent(more than max, do not feed data)
  *
- * @return  	PLAYER_NOT_VALID_PID    playet tag invalid
- *          	PLAYER_NOMEM            alloc memory failed
- *          	PLAYER_SUCCESS          success
+ * @return      PLAYER_NOT_VALID_PID    playet tag invalid
+ *              PLAYER_NOMEM            alloc memory failed
+ *              PLAYER_SUCCESS          success
  *
- * @details 	if buffer level low than min, player auto pause to buffer data,
- *				if buffer level high than middle, player auto reusme playback
+ * @details     if buffer level low than min, player auto pause to buffer data,
+ *              if buffer level high than middle, player auto reusme playback
  */
 /* --------------------------------------------------------------------------*/
 int player_set_autobuffer_level(int pid, float min, float middle, float max)
@@ -737,18 +737,18 @@ int player_set_autobuffer_level(int pid, float min, float middle, float max)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	player_send_message
+ * @function    player_send_message
  *
- * @brief   	send message to player thread
+ * @brief       send message to player thread
  *
  * @param[in]   pid player tag which get from player_start return value
  * @param[in]   cmd player control command
  *
- * @return  	PLAYER_NOT_VALID_PID    playet tag invalid
- *          	PLAYER_NOMEM            alloc memory failed
- *          	PLAYER_SUCCESS          success
+ * @return      PLAYER_NOT_VALID_PID    playet tag invalid
+ *              PLAYER_NOMEM            alloc memory failed
+ *              PLAYER_SUCCESS          success
  *
- * @details 	if player has exited, send message invalid
+ * @details     if player has exited, send message invalid
  */
 /* --------------------------------------------------------------------------*/
 int player_send_message(int pid, player_cmd_t *cmd)
@@ -764,7 +764,7 @@ int player_send_message(int pid, player_cmd_t *cmd)
     }
 
     if (player_get_state(pid) == PLAYER_EXIT) {
-		player_close_pid_data(pid);
+        player_close_pid_data(pid);
         return PLAYER_SUCCESS;
     }
 
@@ -778,25 +778,25 @@ int player_send_message(int pid, player_cmd_t *cmd)
     } else {
         r = PLAYER_NOMEM;
     }
-	player_close_pid_data(pid);
+    player_close_pid_data(pid);
     return r;
 }
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	player_register_update_callback
+ * @function    player_register_update_callback
  *
- * @brief   	App can register a update callback function into player
+ * @brief       App can register a update callback function into player
  *
  * @param[in]   cb          callback structure point
  * @param[in]   up_fn       update function
  * @param[in]   interval_s  update interval (milliseconds)
  *
- * @return  	PLAYER_EMPTY_P          invalid pointer
- *          	PLAYER_ERROR_CALLBACK   up_fn invalid
- *          	PLAYER_SUCCESS          success
+ * @return      PLAYER_EMPTY_P          invalid pointer
+ *              PLAYER_ERROR_CALLBACK   up_fn invalid
+ *              PLAYER_SUCCESS          success
  *
- * @details 	used to update player status
+ * @details     used to update player status
  */
 /* --------------------------------------------------------------------------*/
 int player_register_update_callback(callback_t *cb, update_state_fun_t up_fn, int interval_s)
@@ -814,16 +814,16 @@ int player_register_update_callback(callback_t *cb, update_state_fun_t up_fn, in
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	player_get_state
+ * @function    player_get_state
  *
- * @brief   	get player current state
+ * @brief       get player current state
  *
  * @param[in]   pid player tag which get from player_start return value
  *
- * @return  	status  player current status
- *          	PLAYER_NOT_VALID_PID error,invalid pid
+ * @return      status  player current status
+ *              PLAYER_NOT_VALID_PID error,invalid pid
  *
- * @details 	state defined in player_type.h
+ * @details     state defined in player_type.h
  */
 /* --------------------------------------------------------------------------*/
 player_status player_get_state(int pid)
@@ -844,16 +844,16 @@ player_status player_get_state(int pid)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	player_get_extern_priv
+ * @function    player_get_extern_priv
  *
- * @brief   	get current player's unique identification
+ * @brief       get current player's unique identification
  *
  * @param[in]   pid player tag which get from player_start return value
  *
- * @return  	externed                player's unique identification
- *          	PLAYER_NOT_VALID_PID    error,invalid pid
+ * @return      externed                player's unique identification
+ *              PLAYER_NOT_VALID_PID    error,invalid pid
  *
- * @details     
+ * @details
  */
 /* --------------------------------------------------------------------------*/
 unsigned int player_get_extern_priv(int pid)
@@ -875,17 +875,17 @@ unsigned int player_get_extern_priv(int pid)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	player_get_play_info
+ * @function    player_get_play_info
  *
- * @brief   	get player's information
+ * @brief       get player's information
  *
  * @param[in]   pid     player tag which get from player_start return value
  * @param[out]  info    play info structure pointer
  *
- * @return  	PLAYER_SUCCESS          success
- *          	PLAYER_NOT_VALID_PID    error,invalid pid
+ * @return      PLAYER_SUCCESS          success
+ *              PLAYER_NOT_VALID_PID    error,invalid pid
  *
- * @details 	get playing information,status, current_time, buferlevel etc.
+ * @details     get playing information,status, current_time, buferlevel etc.
  */
 /* --------------------------------------------------------------------------*/
 int player_get_play_info(int pid, player_info_t *info)
@@ -906,35 +906,35 @@ int player_get_play_info(int pid, player_info_t *info)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @fucntion   	player_get_media_info
+ * @fucntion    player_get_media_info
  *
- * @brief   	get file media information
+ * @brief       get file media information
  *
  * @param[in]   pid     player tag which get from player_start return value
  * @param[out]  minfo   media info structure pointer
  *
- * @return  	PLAYER_SUCCESS          success
- *          	PLAYER_NOT_VALID_PID    error,invalid pid
+ * @return      PLAYER_SUCCESS          success
+ *              PLAYER_NOT_VALID_PID    error,invalid pid
  *
- * @details 	get file media information, such as audio format, video format, etc.
+ * @details     get file media information, such as audio format, video format, etc.
  */
 /* --------------------------------------------------------------------------*/
 int player_get_media_info(int pid, media_info_t *minfo)
 {
     play_para_t *player_para;
-	player_status sta;
-	
+    player_status sta;
+
     player_para = player_open_pid_data(pid);
     if (player_para == NULL) {
         return PLAYER_NOT_VALID_PID;    /*this data is 0 for default!*/
     }
-	
-	sta = get_player_state(player_para);
-	if (sta >= PLAYER_ERROR && sta <= PLAYER_EXIT) {
-		player_close_pid_data(pid);
-		return PLAYER_INVALID_CMD;
-	}
-	
+
+    sta = get_player_state(player_para);
+    if (sta >= PLAYER_ERROR && sta <= PLAYER_EXIT) {
+        player_close_pid_data(pid);
+        return PLAYER_INVALID_CMD;
+    }
+
     MEMSET(minfo, 0, sizeof(media_info_t));
     MEMCPY(minfo, &player_para->media_info, sizeof(media_info_t));
 
@@ -946,16 +946,16 @@ int player_get_media_info(int pid, media_info_t *minfo)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function  	player_video_overlay_en
+ * @function    player_video_overlay_en
  *
- * @brief   	enable osd colorkey
+ * @brief       enable osd colorkey
  *
  * @param[in]   enable  osd colorkey enable flag
  *
- * @return  	PLAYER_SUCCESS  success
- *          	PLAYER_FAILED   failed
+ * @return      PLAYER_SUCCESS  success
+ *              PLAYER_FAILED   failed
  *
- * @details	 	
+ * @details
  */
 /* --------------------------------------------------------------------------*/
 int player_video_overlay_en(unsigned enable)
@@ -982,17 +982,17 @@ int player_video_overlay_en(unsigned enable)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	audio_set_mute
+ * @function    audio_set_mute
  *
- * @brief   	volume mute switch
+ * @brief       volume mute switch
  *
  * @param[in]   pid     player tag which get from player_start return value
  * @param[in]   mute_on volume mute flag 1:mute 0:inmute
  *
- * @return  	PLAYER_SUCCESS  success
- *          	PLAYER_FAILED   failed
+ * @return      PLAYER_SUCCESS  success
+ *              PLAYER_FAILED   failed
  *
- * @details 
+ * @details
  */
 /* --------------------------------------------------------------------------*/
 
@@ -1022,42 +1022,38 @@ int audio_set_mute(int pid, int mute_on)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	audio_get_volume_range
+ * @function    audio_get_volume_range
  *
- * @brief   	get volume range
+ * @brief       get volume range
  *
  * @param[in]   pid player tag which get from player_start return value
  * @param[out]  min volume minimum
  * @param[out]  max volume maximum
  *
- * @return  	PLAYER_SUCCESS  success
- *          	PLAYER_FAILED   failed
+ * @return      PLAYER_SUCCESS  success
+ *              PLAYER_FAILED   failed
  *
- * @details 	0~1
+ * @details     0~1
  */
 /* --------------------------------------------------------------------------*/
 int audio_get_volume_range(int pid, float *min, float *max)
 {
-    int rtn, imin, imax;
-    rtn = codec_get_volume_range(NULL, imin, imax);
-    min = imin;
-    max = imax;
-    return rtn;
+    return codec_get_volume_range(NULL, min, max);
 }
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	audio_set_volume
+ * @function    audio_set_volume
  *
- * @brief   	set val to volume
+ * @brief       set val to volume
  *
  * @param[in]   pid player tag which get from player_start return value
  * @param[in]   val volume value
  *
- * @return  	PLAYER_SUCCESS  success
- *          	PLAYER_FAILED   failed
+ * @return      PLAYER_SUCCESS  success
+ *              PLAYER_FAILED   failed
  *
- * @details 	val range: 0~1
+ * @details     val range: 0~1
  */
 /* --------------------------------------------------------------------------*/
 int audio_set_volume(int pid, float val)
@@ -1082,15 +1078,15 @@ int audio_set_volume(int pid, float val)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	audio_get_volume
+ * @function    audio_get_volume
  *
- * @brief   	get volume
+ * @brief       get volume
  *
  * @param[in]   pid player tag which get from player_start return value
  *
- * @return  	r = 0  success 
+ * @return      r = 0  success
  *
- * @details 	vol range:0~1
+ * @details     vol range:0~1
  */
 /* --------------------------------------------------------------------------*/
 int audio_get_volume(int pid, float *vol)
@@ -1105,21 +1101,21 @@ int audio_get_volume(int pid, float *vol)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	audio_set_lrvolume
+ * @function    audio_set_lrvolume
  *
- * @brief   	set left and right volume 
+ * @brief       set left and right volume
  *
  * @param[in]   pid player tag which get from player_start return value
  * @param[in]   lval: left volume value
  * @param[in]   rval: right volume value
  *
- * @return  	PLAYER_SUCCESS  success
- *          	PLAYER_FAILED   failed
+ * @return      PLAYER_SUCCESS  success
+ *              PLAYER_FAILED   failed
  *
- * @details 	lvol,rvol range: 0~1
+ * @details     lvol,rvol range: 0~1
  */
 /* --------------------------------------------------------------------------*/
-int audio_set_lrvolume(int pid, float lvol,float rvol)
+int audio_set_lrvolume(int pid, float lvol, float rvol)
 {
     int ret = PLAYER_FAILED;
     play_para_t *player_para;
@@ -1141,22 +1137,22 @@ int audio_set_lrvolume(int pid, float lvol,float rvol)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	audio_get_lrvolume
+ * @function    audio_get_lrvolume
  *
- * @brief   	get left/right volume
+ * @brief       get left/right volume
  *
  * @param[in]   pid player tag which get from player_start return value
  *
- * @return  	r = 0 for success   
+ * @return      r = 0 for success
  *
- * @details 	lvol,rvol range : 0~1
+ * @details     lvol,rvol range : 0~1
  */
 /* --------------------------------------------------------------------------*/
-int audio_get_lrvolume(int pid, float *lvol,float* rvol)
+int audio_get_lrvolume(int pid, float *lvol, float* rvol)
 {
     int r;
 
-    r = codec_get_lrvolume(NULL, lvol,rvol);
+    r = codec_get_lrvolume(NULL, lvol, rvol);
     log_print("[audio_get_volume:%d]r=%d\n", __LINE__, r);
 
     return r;//codec_get_volume(NULL);
@@ -1166,17 +1162,17 @@ int audio_get_lrvolume(int pid, float *lvol,float* rvol)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	audio_set_volume_balance
+ * @function    audio_set_volume_balance
  *
- * @brief   	switch balance
+ * @brief       switch balance
  *
  * @param[in]   pid     player tag which get from player_start return value
  * @param[in]   balance balance flag    1:set balance 0:cancel balance
  *
- * @return  	PLAYER_SUCCESS  success
- *          	PLAYER_FAILED   failed
+ * @return      PLAYER_SUCCESS  success
+ *              PLAYER_FAILED   failed
  *
- * @details 	
+ * @details
  */
 /* --------------------------------------------------------------------------*/
 int audio_set_volume_balance(int pid, int balance)
@@ -1186,16 +1182,16 @@ int audio_set_volume_balance(int pid, int balance)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	audio_swap_left_right
+ * @function    audio_swap_left_right
  *
- * @brief   	swap left and right channel
+ * @brief       swap left and right channel
  *
  * @param[in]   pid player tag which get from player_start return value
  *
- * @return  	PLAYER_SUCCESS  success
- *          	PLAYER_FAILED   failed
+ * @return      PLAYER_SUCCESS  success
+ *              PLAYER_FAILED   failed
  *
- * @details 
+ * @details
  */
 /* --------------------------------------------------------------------------*/
 int audio_swap_left_right(int pid)
@@ -1207,13 +1203,13 @@ int audio_swap_left_right(int pid)
 /**
  * @function   audio_left_mono
  *
- * @brief   	
+ * @brief
  *
  * @param[in]   pid player tag which get from player_start return value
  *
  * @return  PLAYER_SUCCESS  success
  *          PLAYER_FAILED   failed
- * @details 
+ * @details
  */
 /* --------------------------------------------------------------------------*/
 
@@ -1239,15 +1235,15 @@ int audio_left_mono(int pid)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	audio_right_mono
+ * @function    audio_right_mono
  *
- * @brief   	audio_right_mono
+ * @brief       audio_right_mono
  *
  * @param[in]   pid player tag which get from player_start return value
  *
- * @return  	PLAYER_SUCCESS  success
- *          	PLAYER_FAILED   failed
- * @details 
+ * @return      PLAYER_SUCCESS  success
+ *              PLAYER_FAILED   failed
+ * @details
  */
 /* --------------------------------------------------------------------------*/
 int audio_right_mono(int pid)
@@ -1272,15 +1268,15 @@ int audio_right_mono(int pid)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	audio_stereo
+ * @function    audio_stereo
  *
- * @brief   	
+ * @brief
  *
  * @param[in]   pid player tag which get from player_start return value
  *
- * @return  	PLAYER_SUCCESS  success
- *          	PLAYER_FAILED   failed
- * @details 
+ * @return      PLAYER_SUCCESS  success
+ *              PLAYER_FAILED   failed
+ * @details
  */
 /* --------------------------------------------------------------------------*/
 int audio_stereo(int pid)
@@ -1305,17 +1301,17 @@ int audio_stereo(int pid)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	audio_set_spectrum_switch
+ * @function    audio_set_spectrum_switch
  *
- * @brief   	
+ * @brief
  *
  * @param[in]   pid         player tag which get from player_start return value
  * @param[in]   isStart     open/close spectrum switch function
  * @param[in]   interval    swtich interval
  *
- * @return  	PLAYER_SUCCESS  success
- *          	PLAYER_FAILED   failed
- * @details 
+ * @return      PLAYER_SUCCESS  success
+ *              PLAYER_FAILED   failed
+ * @details
  */
 /* --------------------------------------------------------------------------*/
 int audio_set_spectrum_switch(int pid, int isStart, int interval)
@@ -1340,12 +1336,11 @@ int audio_set_spectrum_switch(int pid, int isStart, int interval)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	audio_set_delay
+ * @function    player_progress_exit
  *
- * @brief
+ * @brief       used for all exit,please only call at this process fatal error.
  *
- * @param[in]   pid         player tag which get from player_start return value
- * @param[in]   delay       delay in ms (-500ms to 500ms)
+ * @return      PLAYER_SUCCESS  success
  *
  * @return  	PLAYER_SUCCESS  success
  *          	PLAYER_FAILED   failed
@@ -1392,16 +1387,16 @@ int player_progress_exit(void)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	player_list_allpid
+ * @function    player_list_allpid
  *
- * @brief   	list all alived player pid
+ * @brief       list all alived player pid
  *
  * @param[out]  pid pid list structure pointer
  *
- * @return  	PLAYER_SUCCESS  success
- *          	PLAYER_FAILED   failed
+ * @return      PLAYER_SUCCESS  success
+ *              PLAYER_FAILED   failed
  *
- * @details 	support multiple player threads, but only one threads use hardware decoder
+ * @details     support multiple player threads, but only one threads use hardware decoder
  */
 /* --------------------------------------------------------------------------*/
 
@@ -1423,36 +1418,36 @@ int player_list_allpid(pid_info_t *pid)
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	player_cache_system_init
+ * @function    player_cache_system_init
  *
- * @brief   	player_cache_system_init
+ * @brief       player_cache_system_init
  *
- * @param[in]   enable    
- * @param[in]	dir
- * @param[in]	max_size
- * @param[in]	block_size
+ * @param[in]   enable
+ * @param[in]   dir
+ * @param[in]   max_size
+ * @param[in]   block_size
  *
- * @return  	0;
+ * @return      0;
  *
  * @details
  */
 /* --------------------------------------------------------------------------*/
 
 
-int player_cache_system_init(int enable,const char*dir,int max_size,int block_size)
+int player_cache_system_init(int enable, const char*dir, int max_size, int block_size)
 {
-	return cache_system_init(enable,dir,max_size,block_size);
+    return cache_system_init(enable, dir, max_size, block_size);
 }
 
 /* --------------------------------------------------------------------------*/
 /**
- * @function   	player_status2str
+ * @function    player_status2str
  *
- * @brief   	convert player state value to string
+ * @brief       convert player state value to string
  *
  * @param[in]   status  player status
  *
- * @return  	player status details strings
+ * @return      player status details strings
  *
  * @details
  */
@@ -1463,9 +1458,9 @@ char *player_status2str(player_status status)
     case PLAYER_INITING:
         return "BEGIN_INIT";
 
-	case PLAYER_TYPE_REDY:
-		return "TYPE_READY";
-		
+    case PLAYER_TYPE_REDY:
+        return "TYPE_READY";
+
     case PLAYER_INITOK:
         return "INIT_OK";
 
@@ -1475,7 +1470,7 @@ char *player_status2str(player_status status)
     case PLAYER_BUFFERING:
         return "BUFFERING";
 
-	case PLAYER_BUFFER_OK:
+    case PLAYER_BUFFER_OK:
         return "BUFFEROK";
 
     case PLAYER_PAUSE:
@@ -1510,17 +1505,16 @@ char *player_status2str(player_status status)
 
     case PLAYER_PLAY_NEXT:
         return "PLAY_NEXT";
-		
-	case PLAYER_FOUND_SUB:
-		return "NEW_SUB";
-		
+
+    case PLAYER_FOUND_SUB:
+        return "NEW_SUB";
+
     case PLAYER_DIVX_AUTHORERR:
         return "DIVX_AUTHORERR";
     case PLAYER_DIVX_RENTAL_VIEW:
         return "DIVX_RENTAL";
     case PLAYER_DIVX_RENTAL_EXPIRED:
         return "DIVX_EXPIRED";
-
     default:
         return "UNKNOW_STATE";
     }

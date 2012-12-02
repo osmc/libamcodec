@@ -21,7 +21,7 @@ OBJS = allformats.o         \
        cmftest.o	\
        cmfdec.o	\
        cmfvpb.o	\
-       
+       bandwidth_measure.o      
        
 
 # muxers/demuxers
@@ -349,7 +349,7 @@ OBJS-$(CONFIG_UDP_PROTOCOL)              += udp.o
 OBJS-$(CONFIG_JACK_INDEV)                += timefilter.o
 TESTPROGS = timefilter
 
-OBJS                += file_list.o m3u.o
+OBJS                += file_list2.o m3u.o CacheHttp.o
 
 OBJS                += aviolpbuf.o aviolpcache.o
 

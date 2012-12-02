@@ -9,6 +9,13 @@
 #include <sys/ioctl.h>
 #include "include/Amsysfsutils.h"
 
+#ifndef LOGD
+    #define LOGV ALOGV
+    #define LOGD ALOGD
+    #define LOGI ALOGI
+    #define LOGW ALOGW
+    #define LOGE ALOGE
+#endif
 
 int amsysfs_set_sysfs_str(const char *path, const char *val)
 {

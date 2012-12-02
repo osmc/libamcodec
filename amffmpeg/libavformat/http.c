@@ -36,8 +36,9 @@
    only a subset of it. */
 
 
-#define IPAD_IDENT	"AppleCoreMedia/1.0.0.8C148 (iPad; U; CPU OS 4_2_1 like Mac OS X; zh_cn)"
+#define IPAD_IDENT	"AppleCoreMedia/1.0.0.9A405 (iPad; U; CPU OS 5_0_1 like Mac OS X; zh_cn)"
 
+//#define IPAD_IDENT   "AppleCoreMedia/1.0.0.9B206 (iPad; U; CPU OS 5_1_1 like Mac OS X; zh_cn)"
 /* used for protocol handling */
 #define BUFFER_SIZE (1024*4)
 #define MAX_REDIRECTS 8
@@ -60,7 +61,7 @@ typedef struct {
     int http_code;
     int64_t chunksize;      /**< Used if "Transfer-Encoding: chunked" otherwise -1. */
     int64_t off, filesize;
-    int do_readseek_size;
+    int64_t do_readseek_size;
     char location[MAX_URL_SIZE];
     HTTPAuthState auth_state;
     unsigned char headers[BUFFER_SIZE];
@@ -126,7 +127,7 @@ static int http_open_cnx(URLContext *h)
     int port, use_proxy, err, location_changed = 0, redirects = 0;
     HTTPAuthType cur_auth_type;
     HTTPContext *s = h->priv_data;
-    URLContext *hd = NULL;
+    URLContext *hd =  s->hd;
 
     proxy_path = getenv("http_proxy");
     use_proxy = (proxy_path != NULL) && !getenv("no_proxy") &&
@@ -139,8 +140,7 @@ static int http_open_cnx(URLContext *h)
     av_url_split(NULL, 0, auth, sizeof(auth), hostname, sizeof(hostname), &port,
                  path1, sizeof(path1), s->location);
     ff_url_join(hoststr, sizeof(hoststr), NULL, NULL, hostname, port, NULL);
-
-    if (use_proxy) {
+    if (use_proxy) {        
         av_url_split(NULL, 0, auth, sizeof(auth), hostname, sizeof(hostname), &port,
                      NULL, 0, proxy_path);
         path = s->location;
@@ -152,26 +152,30 @@ static int http_open_cnx(URLContext *h)
     }
     if (port < 0)
         port = 80;
-
+ 
     ff_url_join(buf, sizeof(buf), "tcp", NULL, hostname, port, NULL);
-    err = ffurl_open(&hd, buf, AVIO_FLAG_READ_WRITE);
-    if (err < 0){
-		av_log(h, AV_LOG_INFO, "http_open_cnx:ffurl_open failed ,%d\n",err);
-        goto fail;
-    }	
-
-    s->hd = hd;
+    if (!s->hd) {      
+        err = ffurl_open(&hd, buf, AVIO_FLAG_READ_WRITE);
+        if (err < 0){
+    	     av_log(h, AV_LOG_INFO, "http_open_cnx:ffurl_open failed ,%d\n",err);
+            goto fail;
+        }	
+        s->hd = hd;
+    }else{
+        av_log(h,AV_LOG_INFO,"http_open_cnx,using old handle\n");
+    }
     cur_auth_type = s->auth_state.auth_type;
     if (http_connect(h, path, hoststr, auth, &location_changed) < 0){
-       	av_log(h, AV_LOG_ERROR, "http_open_cnx:http_connect failed\n");
+        av_log(h, AV_LOG_ERROR, "http_open_cnx:http_connect failed\n");
         goto fail;
     }
     if (s->http_code == 401) {
         if (cur_auth_type == HTTP_AUTH_NONE && s->auth_state.auth_type != HTTP_AUTH_NONE) {
             ffurl_close(hd);
+            s->hd = NULL;
             goto redo;
         } else{
-        	av_log(h, AV_LOG_ERROR, "http_open_cnx:failed s->http_code=%d cur_auth_type=%d\n",s->http_code, cur_auth_type);
+            av_log(h, AV_LOG_ERROR, "http_open_cnx:failed s->http_code=%d cur_auth_type=%d\n",s->http_code, cur_auth_type);
             goto fail;
         }
     }
@@ -179,18 +183,21 @@ static int http_open_cnx(URLContext *h)
         && location_changed == 1) {
         /* url moved, get next */
         ffurl_close(hd);
+        s->hd = NULL;
         if (redirects++ >= MAX_REDIRECTS){
-			av_log(h, AV_LOG_ERROR, "HTTP open reach MAX_REDIRECTS\n");
+	     av_log(h, AV_LOG_ERROR, "HTTP open reach MAX_REDIRECTS\n");
             return AVERROR(EIO);
         }
         location_changed = 0;
-		h->location=s->location;
+	 h->location=s->location;
         goto redo;
     }
     return 0;
  fail:
-    if (hd)
-        ffurl_close(hd);
+    if (s->hd){
+        ffurl_close(s->hd);
+        s->hd = NULL;        
+    }
     if(s->is_seek && s->canseek)
 		s->canseek=0;//changed can't support seek;
     s->hd = NULL;
@@ -209,14 +216,16 @@ static int http_reopen_cnx(URLContext *h,int64_t off)
 	av_log(h, AV_LOG_INFO, "[%s]off=%d s->off=%d\n", __FUNCTION__, off, s->off);
     if(off>=0)
 		s->off = off;	
-    /* if it fails, continue on old connection */
+    	/* if it fails, continue on old connection */
 	/*reget it*/
+	s->hd=NULL;
 	if(s->max_connects>1 && old_hd){
 		old_buf_size = s->buf_end - s->buf_ptr;
-    	memcpy(old_buf, s->buf_ptr, old_buf_size);
+    		memcpy(old_buf, s->buf_ptr, old_buf_size);
 	}else{
 		if(old_hd){
 			ffurl_close(old_hd);
+			
 			av_log(h, AV_LOG_INFO, "[%s]close old handle\n", __FUNCTION__);
 		}
 		old_hd=NULL;
@@ -226,15 +235,18 @@ static int http_reopen_cnx(URLContext *h,int64_t off)
     if (http_open_cnx(h) < 0) {
 		if(s->max_connects>1 && old_hd){
 		 	s->chunksize=old_chunksize;
-	        s->hd = old_hd;
-	        s->off = old_off;
+	        	s->hd = old_hd;
+	        	s->off = old_off;
 			memcpy(s->buffer, old_buf, old_buf_size);
 			s->buf_end = s->buffer + old_buf_size;
+			s->buf_ptr = s->buffer;
 			s->max_connects=1;/*do two open seek failed,
 							we think the server have link limited*/
 	        return -1;
-		}else{	
-			s->chunksize=-1;
+		}else{
+		s->buf_ptr = s->buffer;/*bufptr may changed on process line*/
+    		s->buf_end = s->buffer;
+		s->chunksize=-1;
 	        s->hd = 0;
 	        s->off = 0;
 	        return -1;
@@ -253,6 +265,7 @@ static int http_open(URLContext *h, const char *uri, int flags)
 	int ret;
 	int open_retry=0;
     h->is_streamed = 1;
+    s->hd = NULL;
 	
     s->filesize = -1;
 	s->is_seek=1;
@@ -260,7 +273,7 @@ static int http_open(URLContext *h, const char *uri, int flags)
     av_strlcpy(s->location, uri, sizeof(s->location));
 	s->max_connects=MAX_CONNECT_LINKS;	
 	ret = http_open_cnx(h);
-	while(ret<0 && open_retry++<OPEN_RETRY_MAX && !url_interrupt_cb()){
+	while(ret<0 && open_retry++<OPEN_RETRY_MAX && !url_interrupt_cb() && (s->http_code != 404 ||s->http_code != 503)){
 		s->is_seek=0;
 		s->canseek=0;
     	ret = http_open_cnx(h);
@@ -274,7 +287,7 @@ static int shttp_open(URLContext *h, const char *uri, int flags)
 	int ret;
 	int open_retry=0;
     h->is_streamed = 1;
-
+     s->hd = NULL;
     s->filesize = -1;
 	s->is_seek=1;
 	s->canseek=1;
@@ -358,6 +371,7 @@ static int process_line(URLContext *h, char *line, int line_count,
         while (isspace(*p))
             p++;
         s->http_code = strtol(p, &end, 10);
+        h->http_code = s->http_code;
 
         av_dlog(NULL, "http_code=%d\n", s->http_code);
 
@@ -408,6 +422,10 @@ static int process_line(URLContext *h, char *line, int line_count,
         } else if (!strcasecmp (tag, "Connection")) {
             if (!strcmp(p, "close"))
                 s->willclose = 1;
+        }else  if (!strcasecmp (tag, "Server")) {
+            if (!strncmp(p, "Octoshape-Ondemand", strlen("Octoshape-Ondemand")))
+                h->is_streamed = 0;     /* Octoshape-Ondemand http server support seek */
+                av_log(h, AV_LOG_INFO, "Octoshape-Ondemand support seek!\n");
         }
     }
     return 1;
@@ -441,7 +459,7 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
        len += av_strlcatf(headers + len, sizeof(headers) - len,
                           "User-Agent: %s\r\n", IPAD_IDENT);
 
-	if (h->headers) {
+    if (h->headers) {
 		len += av_strlcatf(headers + len, sizeof(headers) - len,
                            "%s", h->headers); /*the headers have \r\n*/
 
@@ -451,10 +469,11 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
     if (!has_header(s->headers, "\r\nAccept: "))
         len += av_strlcpy(headers + len, "Accept: */*\r\n",
                           sizeof(headers) - len);	
-    if (!has_header(s->headers, "\r\nRange: ") && (s->off>0 || s->is_seek))
+    if (!has_header(s->headers, "\r\nRange: ") && (s->off>0 || s->is_seek)
+        &&!has_header(headers, "\r\nRange: ")/*&&!s->hd->is_streamed*/)
         len += av_strlcatf(headers + len, sizeof(headers) - len,
                            "Range: bytes=%"PRId64"-\r\n", s->off);
-    if (!has_header(s->headers, "\r\nConnection: "))
+    if (!has_header(s->headers, "\r\nConnection: ")&&!has_header(headers, "\r\nConnection: "))
         len += av_strlcpy(headers + len, "Connection: close\r\n",
                           sizeof(headers)-len);
     if (!has_header(s->headers, "\r\nHost: "))
@@ -462,7 +481,8 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
                            "Host: %s\r\n", hoststr);
 
     /* now add in custom headers */
-    av_strlcpy(headers+len, s->headers, sizeof(headers)-len);
+    if (s->headers)
+        av_strlcpy(headers + len, s->headers, sizeof(headers) - len);
 
     snprintf(s->buffer, sizeof(s->buffer),
              "%s %s HTTP/1.1\r\n"
@@ -516,10 +536,11 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
     }
 
 
-    if(off>s->off && (off-s->off)<1024*1024){/*if seek failed & the gap  is not too big(1M),we can do read seek*/
+    if(s->off>=0 && off>s->off){/*if seek failed,we try do read seek*/
 		/*server can't support seek,the off is ignored.we do read seek later;*/
 		s->do_readseek_size=off-s->off;
 		s->off=off;
+		av_log(h, AV_LOG_INFO, "Server Can't support SEEK,we try do read seek to resume playing readseek size=%lld\n",s->do_readseek_size);
      }
 	return (off == s->off) ? 0 : -1;
 }
@@ -527,17 +548,16 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
 
 static int http_read(URLContext *h, uint8_t *buf, int size)
 {
-	#define MILLION 1000
+    #define MILLION 1000
 
     HTTPContext *s = h->priv_data;
     int len;
-	int err_retry=READ_RETRY_MAX;
-retry:	
-	if (url_interrupt_cb()) {
-		av_log(h, AV_LOG_INFO, "http_read interrupt, err :-%d\n", AVERROR(EIO));
-		return AVERROR(EIO);
-	}
-	
+    int err_retry=READ_RETRY_MAX;
+retry:
+    if (url_interrupt_cb()) {
+        av_log(h, AV_LOG_INFO, "http_read interrupt, err :-%d\n", AVERROR(EIO));
+        return AVERROR(EIO);
+    }
     if (s->chunksize >= 0) {
         if (!s->chunksize) {
             char line[32];
@@ -545,9 +565,9 @@ retry:
             for(;;) {
                 do {
                     if (http_get_line(s, line, sizeof(line)) < 0){
-						av_log(h, AV_LOG_ERROR, "http_read failed\n");
+                        av_log(h, AV_LOG_ERROR, "http_read failed\n");
                         return AVERROR(EIO);
-                    }	
+                    }   
                 } while (!*line);    /* skip CR LF from last chunk */
 
                 s->chunksize = strtoll(line, NULL, 16);
@@ -555,7 +575,7 @@ retry:
                 av_dlog(h, "Chunked encoding data size: %"PRId64"'\n", s->chunksize);
 
                 if (!s->chunksize){
-					av_log(h, AV_LOG_ERROR, "http_read s->chunksize failed\n");
+                    av_log(h, AV_LOG_ERROR, "http_read s->chunksize failed\n");
                     return 0;
                 }	
                 break;
@@ -572,24 +592,25 @@ retry:
         s->buf_ptr += len;
     } else {
         if (!s->willclose && s->filesize >= 0 && s->off >= s->filesize){
-			av_log(h, AV_LOG_ERROR, "http_read eof len=%d\n",len);
+            av_log(h, AV_LOG_ERROR, "http_read eof len=%d\n",len);
             return 0;
         }
-		if(s->hd){
-        	len = ffurl_read(s->hd, buf, size);
-		}else{
-			av_log(h, AV_LOG_INFO, "http read hd not opened,force to retry open\n");
-			len=-1;/*hd not opened,force to retry open*/
-			goto errors;
-		}
-		//av_log(h, AV_LOG_ERROR, "ffurl_read %d\n",len);
+        if(s->hd){
+            len = ffurl_read(s->hd, buf, size);
+        }else{
+            av_log(h, AV_LOG_INFO, "http read hd not opened,force to retry open\n");
+            len=-1;/*hd not opened,force to retry open*/
+            goto errors;
+        }
+        //av_log(h, AV_LOG_ERROR, "ffurl_read %d\n",len);
     }
     if (len > 0) {
-        s->off += len;
+        if(s->do_readseek_size<=0)
+            s->off += len;
         if (s->chunksize > 0)
             s->chunksize -= len;
     }
-	if(len==AVERROR(EAGAIN)){
+    if(len==AVERROR(EAGAIN)){
 		struct timespec new_time;
 		long new_time_mseconds;
 		long max_wait_time=READ_RETRY_MAX_TIME_MS;
@@ -620,7 +641,7 @@ errors:
 		http_reopen_cnx(h,-1);
 		goto retry;
 	}
-	if(s->do_readseek_size>0){
+	if(s->do_readseek_size>0 && len >0){
 		/*we have do seek failed,the offset is not  same as uper level need drop data here now.*/
 		if(len>s->do_readseek_size){
 			len=len-s->do_readseek_size;
@@ -662,6 +683,32 @@ static int http_write(URLContext *h, const uint8_t *buf, int size)
     return size;
 }
 
+int ff_http_do_new_request(URLContext *h, const char *uri)
+{
+    if(!h)
+        return -1;
+    HTTPContext *s = h->priv_data;   
+    if(!s)
+        return -1;
+    s->off = 0;
+    if(uri!=NULL){
+        av_strlcpy(s->location, uri, sizeof(s->location));
+    }
+    int open_retry = 0;
+    int ret = -1;
+
+    s->is_seek=1;
+    s->canseek=1;
+    ret = http_open_cnx(h);
+    
+    while(ret<0 && open_retry++<OPEN_RETRY_MAX && !url_interrupt_cb()){
+        s->is_seek=0;
+        s->canseek=0;
+        ret = http_open_cnx(h);
+    }        
+    s->is_seek=0;
+    return ret;
+}
 static int http_close(URLContext *h)
 {
     int ret = 0;

@@ -22,10 +22,19 @@
 #define VIDEO_PATH       "/dev/amvideo"
 #define VIDEO_GLOBAL_OFFSET_PATH "/sys/class/video/global_offset"
 #define FREE_SCALE_PATH  "/sys/class/graphics/fb0/free_scale"
+#define PPSCALER_PATH  "/sys/class/ppmgr/ppscaler"
 
 static int rotation = 0;
 static int disp_width = 1920;
 static int disp_height = 1080;
+
+#ifndef LOGD
+    #define LOGV ALOGV
+    #define LOGD ALOGD
+    #define LOGI ALOGI
+    #define LOGW ALOGW
+    #define LOGE ALOGE
+#endif
 
 //#define LOG_FUNCTION_NAME LOGI("%s-%d\n",__FUNCTION__,__LINE__);
 #define LOG_FUNCTION_NAME
@@ -97,6 +106,7 @@ int amvideo_utils_set_virtual_position(int32_t x, int32_t y, int32_t w, int32_t 
         (video_global_offset == 0)) {
         char val[256];
         int free_scale_enable = 0;
+        int ppscaler_enable = 0;
 
         memset(val, 0, sizeof(val));
         if (amsysfs_get_sysfs_str(FREE_SCALE_PATH, val, sizeof(val)) == 0) {
@@ -104,7 +114,13 @@ int amvideo_utils_set_virtual_position(int32_t x, int32_t y, int32_t w, int32_t 
             free_scale_enable = (val[21] == '0') ? 0 : 1;
         }
 
-        if (free_scale_enable == 0) {
+        memset(val, 0, sizeof(val));
+        if (amsysfs_get_sysfs_str(PPSCALER_PATH, val, sizeof(val)) == 0) {
+            /* the returned string should be "current ppscaler mode is disabled/enable" */            
+            ppscaler_enable = (val[24] == 'd') ? 0 : 1;
+        }
+
+        if (free_scale_enable == 0 && ppscaler_enable == 0) {
             dst_x = dst_x * dev_w / disp_w;
             dst_y = dst_y * dev_h / disp_h;
             dst_w = dst_w * dev_w / disp_w;
@@ -261,3 +277,20 @@ int amvideo_utils_set_screen_mode(int mode)
     return 0;
 }
 
+int amvideo_utils_get_video_angle(int *angle)
+{
+    LOG_FUNCTION_NAME
+    int angle_fd;
+    int angle_value = 0;
+    
+    angle_fd = open(ANGLE_PATH, O_RDONLY);
+    if (angle_fd >= 0) {
+        ioctl(angle_fd, PPMGR_IOC_GET_ANGLE, &angle_value);
+        //LOGI("get ppmgr angle %d\n", angle_value);
+        close(angle_fd);
+    }
+    
+    *angle = angle_value;
+
+    return 0;
+}

@@ -22,4 +22,5 @@ extern int iec958_pack_frame(char *buf,int frame_size);
 extern int iec958_packed_frame_write_958buf(char *buf,int frame_size);
 extern int iec958_deinit();
 extern int iec958_check_958buf_level();
+extern int iec958buf_fill_zero();
 #endif

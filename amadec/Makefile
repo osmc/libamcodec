@@ -1,13 +1,19 @@
 M_PREFIX=$(PREFIX)
 
+TARGET=libamadec.so
+
 TARGET_OBJS  = adec-external-ctrl.o
 TARGET_OBJS += adec-internal-mgt.o
+TARGET_OBJS += adec-ffmpeg-mgt.c
 TARGET_OBJS += adec-message.o
-TARGET_OBJS += adec-pts-mgt.o feeder.o
+TARGET_OBJS += adec-pts-mgt.o
+TARGET_OBJS += feeder.o
+TARGET_OBJS += adec_write.c
+TARGET_OBJS += adec_read.c
 TARGET_OBJS += dsp/audiodsp-ctl.o
 TARGET_OBJS += audio_out/alsa-out.o
-
-TARGET=libamadec.so
+TARGET_OBJS += audio_out/aml_resample.c
+TARGET_OBJS += audiodsp_update_format.c
 
 INSTALL_DIR=${M_PREFIX}/lib
 

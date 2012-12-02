@@ -545,6 +545,7 @@ static void reset_predictor_group(PredictorState *ps, int group_num)
         ff_aac_spectral_codes[num], sizeof(ff_aac_spectral_codes[num][0]), sizeof(ff_aac_spectral_codes[num][0]), \
         size);
 
+int adif_ftype_flag=0;
 static av_cold int aac_decode_init(AVCodecContext *avctx)
 {
     AACContext *ac = avctx->priv_data;
@@ -604,7 +605,7 @@ static av_cold int aac_decode_init(AVCodecContext *avctx)
     ff_init_ff_sine_windows( 7);
 
     cbrt_tableinit();
-
+    adif_ftype_flag=0;
     return 0;
 }
 
@@ -2229,8 +2230,28 @@ static int aac_decode_frame(AVCodecContext *avctx, void *data,
     int buf_consumed;
     int buf_offset;
     int err;
-
+	uint8_t tbuf[4]; 
     init_get_bits(&gb, buf, buf_size * 8);
+	//---------------------------
+	{
+	 
+	  tbuf[0]=buf[0]; 
+	  tbuf[1]=buf[1];
+	  tbuf[2]=buf[2];
+	  tbuf[3]=buf[3];
+      //av_log(NULL, AV_LOG_INFO,"step into aac_decode_frame() [%s_%d]\n",__FUNCTION__,__LINE__);
+	  //av_log(NULL, AV_LOG_INFO,"first fout bytes:%s\n",tbuf);
+	  if(tbuf[0]=='A' && tbuf[1]=='D' && tbuf[2]=='I' && tbuf[2]=='F' ){
+	  	 av_log(NULL, AV_LOG_INFO,"the filetype is <ADIF> [%s_%d]\n",__FUNCTION__,__LINE__);
+	  	 adif_ftype_flag=1;
+	     return AVERROR_INVALIDDATA;
+	  }
+	  if(adif_ftype_flag==1)
+	  {
+	     return AVERROR_INVALIDDATA;
+	  }
+	}
+	//---------------------------
 
     if ((err = aac_decode_frame_int(avctx, data, data_size, &gb)) < 0)
         return err;

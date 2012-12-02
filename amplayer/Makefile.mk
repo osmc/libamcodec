@@ -26,27 +26,22 @@ Q=@
 endif	
 export Q
 
-TARGET?=libamplayer.so
+TARGET =libamplayer.so
 
 
 TARGET_IS_LIB=$(TARGET:%so=yes)
 
 
 
-LDFLAGS+= -L$(PREFIX)/lib -lavutil -lavformat -lswscale -lavcodec -lavutil -lm  -lpthread -lamcodec 
+LDFLAGS+= -L$(PREFIX)/lib -lavutil -lavformat -lswscale -lavcodec -lavutil -lm  -lpthread -lamcodec -lamavutils
 
 INSTALL_DIR?=$(PREFIX)/lib
 LDFLAGS+=-shared 
 CFLAGS=$(DIRS:%/=-I$(SRC)/%/include) 
 
 
-ifeq ($(TARGET),libamplayer.so)
-	DIRS=player/
-	DIRS+=player/system/
-else
-	DIRS=control/
-	CFLAGS+=-I$(SRC)/player/include
-endif
+DIRS  = player/
+DIRS += player/system/
 
 CFLAGS+=-I${SRCTREE}/../amffmpeg -I${SRCTREE}/../amcodec/include -I${SRCTREE}/../amadec/include
 CFLAGS+=-fPIC -DENABLE_FREE_SCALE

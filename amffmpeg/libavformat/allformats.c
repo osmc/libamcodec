@@ -22,7 +22,7 @@
 #include "rtp.h"
 #include "rdt.h"
 #include "url.h"
-
+#include "avio.h"
 #define REGISTER_MUXER(X,x) { \
     extern AVOutputFormat ff_##x##_muxer; \
     if(CONFIG_##X##_MUXER) av_register_output_format(&ff_##x##_muxer); }
@@ -129,6 +129,7 @@ void av_register_all(void)
     REGISTER_MUXDEMUX (MMF, mmf);
     REGISTER_MUXDEMUX (MOV, mov);
     REGISTER_MUXER    (MP2, mp2);
+    REGISTER_DEMUXER  (MP2, mp2); // AMLogic add
     REGISTER_MUXDEMUX (MP3, mp3);
     REGISTER_MUXER    (MP4, mp4);
     REGISTER_DEMUXER  (MPC, mpc);
@@ -273,5 +274,5 @@ extern URLProtocol ff_hls_protocol ;
 
 extern URLProtocol ff_cmftest_protocol	;
 	ffurl_register_protocol(&ff_cmftest_protocol,sizeof(ff_cmftest_protocol));
-	
+	ffmpeg_pthread_map_init();
 }

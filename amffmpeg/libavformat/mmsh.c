@@ -34,11 +34,18 @@
 #include "http.h"
 #include "url.h"
 #include "mmsh.h"
+
+#define MMSH_UNKNOWN               0
+#define MMSH_SEEKABLE                1
+#define MMSH_LIVE                   	2
+
 #define CHUNK_HEADER_LENGTH 4   // 2bytes chunk type and 2bytes chunk length.
 #define EXT_HEADER_LENGTH   8   // 4bytes sequence, 2bytes useless and 2bytes chunk length.
 
 // see Ref 2.2.1.8
-#define USERAGENT  "User-Agent: NSPlayer/4.1.0.3856\r\n"
+//#define USERAGENT  "User-Agent: NSPlayer/4.1.0.3856\r\n"
+#define USERAGENT  "User-Agent: NSPlayer/12.0.7680.0\r\n"
+
 // see Ref 2.2.1.4.33
 // the guid value can be changed to any valid value.
 #define CLIENTGUID "Pragma: xClientGUID={c77e7400-738a-11d2-9add-0020af0a3278}\r\n"
@@ -46,28 +53,67 @@
 // see Ref 2.2.3 for packet type define:
 // chunk type contains 2 fields: Frame and PacketID.
 // Frame is 0x24 or 0xA4(rarely), different PacketID indicates different packet type.
+
+static const char* mmsh_FirstRequest =   
+	"Accept: */*\r\n"
+	USERAGENT
+	"Host: %s:%d\r\n"
+	"Progma:version11-enabled=1\r\n"
+	"Pragma: no-cache,rate=1.000000,stream-time=0,stream-offset=0:0,pacakge-num=4294967295,request-context=%u,max-duration=0\r\n"
+	CLIENTGUID
+	"Connection: Close\r\n\r\n";
+
+static const char* mmsh_SeekableRequest =    
+ 	"Accept: */*\r\n"
+	USERAGENT
+	"Host: %s:%d\r\n"
+	"Pragma: no-cache,rate=1.000000,request-context=%u\r\n"
+	"Pragma: xPlayStrm=1\r\n"
+	CLIENTGUID
+	"Pragma: stream-switch-count=%d\r\n"
+	"Pragma: stream-switch-entry=%s\r\n"
+	"Pragma: no-cache,rate=1.000000,stream-time=%u\r\n"
+	"Connection: Close\r\n\r\n";
+
+static const char* mmsh_LiveRequest =   
+	"Accept: */*\r\n"
+	USERAGENT
+	"Host: %s:%d\r\n"
+	"Pragma: no-cache,rate=1.000000,request-context=%u\r\n"
+	"Pragma: xPlayStrm=1\r\n"
+	CLIENTGUID
+	"Pragma: stream-switch-count=%d\r\n"
+	"Pragma: stream-switch-entry=%s\r\n"
+	"Connection: Close\r\n\r\n";
+
 typedef enum {
     CHUNK_TYPE_DATA          = 0x4424,
     CHUNK_TYPE_ASF_HEADER    = 0x4824,
     CHUNK_TYPE_END           = 0x4524,
     CHUNK_TYPE_STREAM_CHANGE = 0x4324,
+    CHUNK_TYPE_METADATA = 0x4D24,
 } ChunkType;
 
 typedef struct {
     MMSContext mms;
+    uint8_t location[1024];
     int request_seq;  ///< request packet sequence
     int chunk_seq;    ///< data packet sequence
+    int flags;
 } MMSHContext;
 
 static int mmsh_close(URLContext *h)
 {
     MMSHContext *mmsh = (MMSHContext *)h->priv_data;
-    MMSContext *mms   = &mmsh->mms;
-    if (mms->mms_hd)
-        ffurl_close(mms->mms_hd);
-    av_free(mms->streams);
-    av_free(mms->asf_header);
-    av_freep(&h->priv_data);
+    if(NULL!=mmsh)	{
+        MMSContext *mms   = &mmsh->mms;
+        if (mms->mms_hd)
+            ffurl_close(mms->mms_hd);
+        av_free(mms->streams);
+        av_free(mms->asf_header);
+        av_freep(&h->priv_data);
+
+    }
     return 0;
 }
 
@@ -86,8 +132,8 @@ static ChunkType get_chunk_header(MMSHContext *mmsh, int *len)
     }
     chunk_type = AV_RL16(chunk_header);
     chunk_len  = AV_RL16(chunk_header + 2);
-
-    switch (chunk_type) {
+    chunk_type &=0xff7f;//never care B flag in framing header,see 2.2.3.1.1
+    switch (chunk_type&0xff7f) {
     case CHUNK_TYPE_END:
     case CHUNK_TYPE_STREAM_CHANGE:
         ext_header_len = 4;
@@ -96,6 +142,9 @@ static ChunkType get_chunk_header(MMSHContext *mmsh, int *len)
     case CHUNK_TYPE_DATA:
         ext_header_len = 8;
         break;
+    case CHUNK_TYPE_METADATA:
+	 ext_header_len = 8;	
+	 break;
     default:
         av_log(NULL, AV_LOG_ERROR, "Strange chunk type %d\n", chunk_type);
         return AVERROR_INVALIDDATA;
@@ -211,50 +260,51 @@ static int get_http_header_data(MMSHContext *mmsh)
     return 0;
 }
 
-static int mmsh_open(URLContext *h, const char *uri, int flags)
+static int mmsh_open_internal(URLContext *h, const char *uri, int flags, int timestamp, int64_t pos)
 {
     int i, port, err;
-    char httpname[256], path[256], host[128], location[1024];
+    char httpname[256], path[256], host[128];
     char *stream_selection = NULL;
     char headers[1024];
     MMSHContext *mmsh;
-    MMSContext *mms;
-
-    mmsh = h->priv_data = av_mallocz(sizeof(MMSHContext));
+    MMSContext *mms;	
+   
+    mmsh = h->priv_data = av_mallocz(sizeof(MMSHContext));     
+   
+	
     if (!h->priv_data)
         return AVERROR(ENOMEM);
-    mmsh->request_seq = h->is_streamed = 1;
-    mms = &mmsh->mms;
-    if(strncmp(uri,"mmsh:http://",sizeof("mmsh:http://")))/*protocol swtich,add the mmsh on the header*/
-		av_strlcpy(location, uri+5, sizeof(location));//del the mmsh first
-	else
-    		av_strlcpy(location, uri, sizeof(location));
 
+    mmsh->request_seq = h->is_streamed = 1;
+		
+    mms = &mmsh->mms;
+	
+    if(!strncmp(uri,"mmsh:shttp://",strlen("mmsh:shttp://")))/*protocol swtich,add the mmsh on the header*/
+        av_strlcpy(mmsh->location, uri+6, sizeof(mmsh->location));//del the mmsh first   
+    else		
+	 av_strlcpy(mmsh->location, uri, sizeof(mmsh->location));
+	 
+    
+   
     av_url_split(NULL, 0, NULL, 0,
-        host, sizeof(host), &port, path, sizeof(path), location);
+        host, sizeof(host), &port, path, sizeof(path), mmsh->location);   
     if (port<0)
         port = 80; // default mmsh protocol port
     ff_url_join(httpname, sizeof(httpname), "http", NULL, host, port, "%s", path);
 
     if (ffurl_alloc(&mms->mms_hd, httpname, AVIO_FLAG_READ) < 0) {
         return AVERROR(EIO);
-    }
-
+    }  
     snprintf(headers, sizeof(headers),
-             "Accept: */*\r\n"
-             USERAGENT
-             "Host: %s:%d\r\n"
-             "Pragma: no-cache,rate=1.000000,stream-time=0,"
-             "stream-offset=0:0,request-context=%u,max-duration=0\r\n"
-             CLIENTGUID
-             "Connection: Close\r\n",
+             mmsh_FirstRequest,
              host, port, mmsh->request_seq++);
     ff_http_set_headers(mms->mms_hd, headers);
-
+		   
     err = ffurl_connect(mms->mms_hd);
     if (err) {
         goto fail;
     }
+
     err = get_http_header_data(mmsh);
     if (err) {
         av_log(NULL, AV_LOG_ERROR, "Get http header data failed!\n");
@@ -263,9 +313,10 @@ static int mmsh_open(URLContext *h, const char *uri, int flags)
 
     // close the socket and then reopen it for sending the second play request.
     ffurl_close(mms->mms_hd);
+    //fix me? just need probe data,for judge live and vod.	
     memset(headers, 0, sizeof(headers));
-    if (ffurl_alloc(&mms->mms_hd, httpname, AVIO_FLAG_READ) < 0) {
-        return AVERROR(EIO);
+    if ((err = ffurl_alloc(&mms->mms_hd, httpname, AVIO_FLAG_READ)) < 0) {
+        goto fail;
     }
     stream_selection = av_mallocz(mms->stream_num * 19 + 1);
     if (!stream_selection)
@@ -278,23 +329,17 @@ static int mmsh_open(URLContext *h, const char *uri, int flags)
         av_strlcat(stream_selection, tmp, mms->stream_num * 19 + 1);
     }
     // send play request
+    
     err = snprintf(headers, sizeof(headers),
-                   "Accept: */*\r\n"
-                   USERAGENT
-                   "Host: %s:%d\r\n"
-                   "Pragma: no-cache,rate=1.000000,request-context=%u\r\n"
-                   "Pragma: xPlayStrm=1\r\n"
-                   CLIENTGUID
-                   "Pragma: stream-switch-count=%d\r\n"
-                   "Pragma: stream-switch-entry=%s\r\n"
-                   "Connection: Close\r\n",
-                   host, port, mmsh->request_seq++, mms->stream_num, stream_selection);
+                   mmsh_SeekableRequest,
+                   host, port, mmsh->request_seq++, mms->stream_num, stream_selection, timestamp);
+	
     av_freep(&stream_selection);
     if (err < 0) {
         av_log(NULL, AV_LOG_ERROR, "Build play request failed!\n");
         goto fail;
     }
-    av_dlog(NULL, "out_buffer is %s", headers);
+    av_log(NULL,AV_LOG_DEBUG, "out_buffer is %s", headers);
     ff_http_set_headers(mms->mms_hd, headers);
 
     err = ffurl_connect(mms->mms_hd);
@@ -315,6 +360,11 @@ fail:
     mmsh_close(h);
     av_dlog(NULL, "Connection failed with error %d\n", err);
     return err;
+}
+
+static int mmsh_open(URLContext *h, const char *uri, int flags)
+{
+    return mmsh_open_internal(h, uri, flags, 0, 0);
 }
 
 static int handle_chunk_type(MMSHContext *mmsh)
@@ -395,11 +445,50 @@ int is_mmsh_file(AVIOContext *pb,const char *name)
 	av_log(NULL,AV_LOG_INFO,"is_mmsh_file=%d\n",score);
 	return score>=100?100:score;
 }
+
+static int64_t mmsh_read_seek(URLContext *h, int stream_index,
+                        int64_t timestamp, int flags)
+{
+	MMSHContext *mmsh = h->priv_data;
+	MMSContext *mms   = &mmsh->mms;
+	int ret;
+	
+	//av_log(NULL,AV_LOG_DEBUG,"%s======= %d,%lld,%d,%d\n", __FUNCTION__,__LINE__,timestamp,flags,stream_index);
+	ret= mmsh_open_internal(h, mmsh->location, 0, FFMAX(timestamp, 0), 0);
+
+	if(ret>=0){
+		if (mms->mms_hd)
+		    ffurl_close(mms->mms_hd);
+		av_freep(&mms->streams);
+		av_freep(&mms->asf_header);
+		av_free(mmsh);
+		mmsh = h->priv_data;
+		mms   = &mmsh->mms;
+		mms->asf_header_read_size= mms->asf_header_size;
+	}else
+		h->priv_data= mmsh;
+	return ret;
+}
+
+static int64_t mmsh_seek(URLContext *h, int64_t pos, int whence)
+{
+	//av_log(NULL,AV_LOG_DEBUG, "%s======= %d,%lld,%d\n", __FUNCTION__,__LINE__,pos,whence);
+	MMSHContext *mmsh = h->priv_data;
+	MMSContext *mms   = &mmsh->mms;
+	
+	if (whence == AVSEEK_SIZE&&(mms->flags&0x02>0)&&(mms->flags&0x01==0)) {
+		av_log(NULL,AV_LOG_DEBUG,"[%s]:Get stream size: %lld\n",mms->file_size);
+		return mms->file_size;
+	}
+	if(pos == 0 && whence == SEEK_CUR)
+		return mms->asf_header_read_size + mms->remaining_in_len + mmsh->chunk_seq * mms->asf_packet_len;
+	return AVERROR(ENOSYS);
+}
 URLProtocol ff_mmsh_protocol = {
     .name      = "mmsh",
     .url_open  = mmsh_open,
     .url_read  = mmsh_read,
-    .url_write = NULL,
-    .url_seek  = NULL,
+    .url_seek  = mmsh_seek,
     .url_close = mmsh_close,
+    .url_read_seek  = mmsh_read_seek,  
 };

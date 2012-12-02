@@ -37,7 +37,7 @@ static void vcodec_info_init(play_para_t *p_para, codec_para_t *v_codec)
     v_codec->am_sysinfo.width   = vinfo->video_width;
     v_codec->am_sysinfo.rate    = vinfo->video_rate;
     v_codec->am_sysinfo.ratio   = vinfo->video_ratio;
-	v_codec->am_sysinfo.ratio64 = vinfo->video_ratio64;
+    v_codec->am_sysinfo.ratio64 = vinfo->video_ratio64;
     v_codec->noblock = !!p_para->buffering_enable;
     if ((vinfo->video_format == VFORMAT_MPEG4)
         || (vinfo->video_format == VFORMAT_H264)
@@ -58,9 +58,9 @@ static void vcodec_info_init(play_para_t *p_para, codec_para_t *v_codec)
 }
 static void acodec_info_init(play_para_t *p_para, codec_para_t *a_codec)
 {
-	AVCodecContext  *pCodecCtx;
+    AVCodecContext  *pCodecCtx;
     a_stream_info_t *ainfo = &p_para->astream_info;
-	
+
     a_codec->has_audio      = 1;
     a_codec->audio_type     = ainfo->audio_format;
     a_codec->audio_pid      = ainfo->audio_pid;
@@ -74,15 +74,14 @@ static void acodec_info_init(play_para_t *p_para, codec_para_t *a_codec)
               a_codec->audio_samplerate, a_codec->audio_channels);
 
     /*if ((a_codec->audio_type == AFORMAT_ADPCM) || (a_codec->audio_type == AFORMAT_WMA) || (a_codec->audio_type == AFORMAT_WMAPRO) || (a_codec->audio_type == AFORMAT_PCM_S16BE) || (a_codec->audio_type == AFORMAT_PCM_S16LE) || (a_codec->audio_type == AFORMAT_PCM_U8) \
-		||(a_codec->audio_type == AFORMAT_AMR)) {*/
-	  if(IS_AUIDO_NEED_EXT_INFO(a_codec->audio_type)){
-	  	pCodecCtx = p_para->pFormatCtx->streams[p_para->astream_info.audio_index]->codec;
-               if ((a_codec->audio_type == AFORMAT_ADPCM)||(a_codec->audio_type == AFORMAT_ALAC)) {
+        ||(a_codec->audio_type == AFORMAT_AMR)) {*/
+    if (IS_AUIDO_NEED_EXT_INFO(a_codec->audio_type)) {
+        pCodecCtx = p_para->pFormatCtx->streams[p_para->astream_info.audio_index]->codec;
+        if ((a_codec->audio_type == AFORMAT_ADPCM) || (a_codec->audio_type == AFORMAT_ALAC)) {
             a_codec->audio_info.bitrate = pCodecCtx->sample_fmt;
-        }
-	else if(a_codec->audio_type==AFORMAT_APE)
-		 a_codec->audio_info.bitrate = pCodecCtx->bits_per_coded_sample;
-	 else {
+        } else if (a_codec->audio_type == AFORMAT_APE) {
+            a_codec->audio_info.bitrate = pCodecCtx->bits_per_coded_sample;
+        } else {
             a_codec->audio_info.bitrate = pCodecCtx->bit_rate;
         }
         a_codec->audio_info.sample_rate = pCodecCtx->sample_rate;
@@ -91,19 +90,18 @@ static void acodec_info_init(play_para_t *p_para, codec_para_t *a_codec)
         a_codec->audio_info.block_align = pCodecCtx->block_align;
         a_codec->audio_info.extradata_size = pCodecCtx->extradata_size;
         if (a_codec->audio_info.extradata_size > 0) {
-	     if(a_codec->audio_info.extradata_size > 	AUDIO_EXTRA_DATA_SIZE)
-	     {
-      			log_print("[%s:%d],extra data size exceed max  extra data buffer,cut it to max buffer size ", __FUNCTION__, __LINE__);
-			a_codec->audio_info.extradata_size = 	AUDIO_EXTRA_DATA_SIZE;
-  	     }
+            if (a_codec->audio_info.extradata_size >    AUDIO_EXTRA_DATA_SIZE) {
+                log_print("[%s:%d],extra data size exceed max  extra data buffer,cut it to max buffer size ", __FUNCTION__, __LINE__);
+                a_codec->audio_info.extradata_size =    AUDIO_EXTRA_DATA_SIZE;
+            }
             memcpy((char*)a_codec->audio_info.extradata, pCodecCtx->extradata, a_codec->audio_info.extradata_size);
         }
         a_codec->audio_info.valid = 1;
-   	log_print("[%s]fmt=%d srate=%d chanels=%d extrasize=%d,block align %d,codec id 0x%x\n", __FUNCTION__, a_codec->audio_type,\
-			a_codec->audio_info.sample_rate, a_codec->audio_info.channels,a_codec->audio_info.extradata_size,a_codec->audio_info.block_align,a_codec->audio_info.codec_id);
+        log_print("[%s]fmt=%d srate=%d chanels=%d extrasize=%d,block align %d,codec id 0x%x\n", __FUNCTION__, a_codec->audio_type, \
+                  a_codec->audio_info.sample_rate, a_codec->audio_info.channels, a_codec->audio_info.extradata_size, a_codec->audio_info.block_align, a_codec->audio_info.codec_id);
 
     }
- }
+}
 
 static void scodec_info_init(play_para_t *p_para, codec_para_t *s_codec)
 {

@@ -164,6 +164,7 @@ static void *dts_enc_loop()
             case ACTIVE:
                 break;
             case PAUSED:
+				iec958buf_fill_zero();
                 usleep(100000);
                 continue;
             case STOPPED:

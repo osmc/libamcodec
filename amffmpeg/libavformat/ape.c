@@ -156,8 +156,8 @@ static int ape_read_header(AVFormatContext * s, AVFormatParameters * ap)
     AVStream *st;
     uint32_t tag;
     int i;
-    int total_blocks;
-    int64_t pts;
+    int total_blocks, final_size = 0;
+    int64_t pts, file_size;
 
     /* Skip any leading junk such as id3v2 tags */
     ape->junklength = avio_tell(pb);
@@ -283,9 +283,17 @@ static int ape_read_header(AVFormatContext * s, AVFormatParameters * ap)
         ape->frames[i - 1].size = ape->frames[i].pos - ape->frames[i - 1].pos;
         ape->frames[i].skip     = (ape->frames[i].pos - ape->frames[0].pos) & 3;
     }
-    ape->frames[ape->totalframes - 1].size    = ape->finalframeblocks * 4;
+    //ape->frames[ape->totalframes - 1].size    = ape->finalframeblocks * 4;
     ape->frames[ape->totalframes - 1].nblocks = ape->finalframeblocks;
-
+    file_size = avio_size(pb);
+    if (file_size > 0) {
+        final_size = file_size - ape->frames[ape->totalframes - 1].pos -
+                     ape->wavtaillength;
+        final_size -= final_size & 3;
+    }
+    if (file_size <= 0 || final_size <= 0)
+        final_size = ape->finalframeblocks * 8;
+    ape->frames[ape->totalframes - 1].size = final_size;
     for (i = 0; i < ape->totalframes; i++) {
         if(ape->frames[i].skip){
             ape->frames[i].pos  -= ape->frames[i].skip;
@@ -351,10 +359,32 @@ static int ape_read_packet(AVFormatContext * s, AVPacket * pkt)
     uint32_t extra_size = 8;
 
     if (url_feof(s->pb))
-        return AVERROR(EIO);
-    if (ape->currentframe > ape->totalframes)
-        return AVERROR(EIO);
-
+	return AVERROR_EOF;
+        //return AVERROR(EIO);
+    if (ape->currentframe >= ape->totalframes)
+	return AVERROR_EOF;
+        //return AVERROR(EIO);
+    //find the correct currentframe when seeking
+    while(0)
+    {
+        if(ape->frames[ape->currentframe].pos==s->pb->pos)
+            break;
+        if(ape->currentframe==0&&ape->frames[ape->currentframe].pos>s->pb->pos)
+            break;
+        if(ape->currentframe==ape->totalframes-1)
+            break;
+        if(ape->frames[ape->currentframe].pos<s->pb->pos&&ape->frames[ape->currentframe+1].pos>s->pb->pos)
+	{
+	    int len=ape->frames[ape->currentframe+1].pos-ape->frames[ape->currentframe].pos;
+            if(s->pb->pos>ape->frames[ape->currentframe].pos+len/2)
+                ape->currentframe+=1;
+            break;
+	}
+        else if(ape->frames[ape->currentframe+1].pos<s->pb->pos)
+            ape->currentframe+=1;
+        else
+            ape->currentframe-=1;
+    }
     avio_seek (s->pb, ape->frames[ape->currentframe].pos, SEEK_SET);
 
     /* Calculate how many blocks there are in this frame */

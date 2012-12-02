@@ -77,6 +77,7 @@ struct MpegTSFilter {
         MpegTSPESFilter pes_filter;
         MpegTSSectionFilter section_filter;
     } u;
+    int encrypt;
 };
 
 #define MAX_PIDS_PER_PROGRAM 64
@@ -527,6 +528,7 @@ static const StreamType ISO_types[] = {
     { 0x1b, AVMEDIA_TYPE_VIDEO,       CODEC_ID_H264 },
     { 0xd1, AVMEDIA_TYPE_VIDEO,      CODEC_ID_DIRAC },
     { 0xea, AVMEDIA_TYPE_VIDEO,        CODEC_ID_VC1 },
+    { 0x42, AVMEDIA_TYPE_VIDEO,        CODEC_ID_CAVS},
     { 0 },
 };
 
@@ -1290,6 +1292,10 @@ static int handle_packet(MpegTSContext *ts, const uint8_t *packet)
         return 0;
 
     /* continuity check (currently not used) */
+    if(packet[3] & 0xC0){		
+	     tss->encrypt=1;
+	     av_log(NULL, AV_LOG_WARNING, "encrypt pid=0x%x\n",tss->pid);
+    }
     cc = (packet[3] & 0xf);
     cc_ok = (tss->last_cc < 0) || ((((tss->last_cc + 1) & 0x0f) == cc));
     tss->last_cc = cc;
@@ -1567,7 +1573,9 @@ static int mpegts_read_header(AVFormatContext *s,
 
     /* read the first 1024 bytes to get packet size */
     pos = avio_tell(pb);
-    len = avio_read(pb, buf, sizeof(buf));
+    do {
+        len = avio_read(pb, buf, sizeof(buf));
+    } while((len < sizeof(buf) || len == AVERROR(EAGAIN)) && !url_interrupt_cb());
     if (len != sizeof(buf))
         goto fail;
     ts->raw_packet_size = get_packet_size(buf, sizeof(buf));
@@ -1590,7 +1598,10 @@ static int mpegts_read_header(AVFormatContext *s,
 
         mpegts_open_section_filter(ts, PAT_PID, pat_cb, ts, 1);
 
-        handle_packets(ts, s->probesize / ts->raw_packet_size);
+        if(pb->fastdetectedinfo)
+		handle_packets(ts, 256*1024 / ts->raw_packet_size);
+	else
+        	handle_packets(ts, s->probesize / ts->raw_packet_size);
         /* if could not find service, enable auto_guess */
 
         ts->auto_guess = 1;
@@ -1703,7 +1714,7 @@ static int mpegts_read_packet(AVFormatContext *s,
                               AVPacket *pkt)
 {
     MpegTSContext *ts = s->priv_data;
-    int ret, i;
+    int ret, i,j;
 
     if (avio_tell(s->pb) != ts->last_pos) {
         /* seek detected, flush pes buffer */
@@ -1721,7 +1732,13 @@ static int mpegts_read_packet(AVFormatContext *s,
     ret = handle_packets(ts, 0);
     if (ret < 0) {
         /* flush pes data left */
-        for (i = 0; i < NB_PID_MAX; i++) {
+        for (i = 0; i < NB_PID_MAX; i++) {		
+	    for (j=0;j<s->nb_streams;j++){
+	 	 if(ts->pids[i] &&s->streams[j]->id==ts->pids[i]->pid&&ts->pids[i]->encrypt==1){
+		      s->streams[j]->encrypt=1;
+		      av_log(NULL, AV_LOG_ERROR, "mpegts find encrypt stream pid %d\n",s->streams[j]->id);
+		  }
+	     }
             if (ts->pids[i] && ts->pids[i]->type == MPEGTS_PES) {
                 PESContext *pes = ts->pids[i]->u.pes_filter.opaque;
                 if (pes->state == MPEGTS_PAYLOAD && pes->data_index > 0) {
@@ -1752,11 +1769,13 @@ static int mpegts_read_close(AVFormatContext *s)
     return 0;
 }
 
+#define GET_PCR_POS 1*1024*1024
+
 static int64_t mpegts_get_pcr(AVFormatContext *s, int stream_index,
                               int64_t *ppos, int64_t pos_limit)
 {
     MpegTSContext *ts = s->priv_data;
-    int64_t pos, timestamp;
+    int64_t pos, timestamp, t_pos = 0;
     uint8_t buf[TS_PACKET_SIZE];
     int pcr_l, pcr_pid = ((PESContext*)s->streams[stream_index]->priv_data)->pcr_pid;
     const int find_next= 1;
@@ -1770,7 +1789,10 @@ static int64_t mpegts_get_pcr(AVFormatContext *s, int stream_index,
                 parse_pcr(&timestamp, &pcr_l, buf) == 0) {
                 break;
             }
+            if(t_pos > GET_PCR_POS)
+			return AV_NOPTS_VALUE;
             pos += ts->raw_packet_size;
+            t_pos += ts->raw_packet_size;
         }
     } else {
         for(;;) {

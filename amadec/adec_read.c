@@ -118,15 +118,20 @@ int read_buffer(unsigned char *buffer,int size)
 //	adec_print("read_buffer start iii = %d!!\n", iii);
 
 	static int cc = 0;
+	len=0;
+	#if 0
 	while( size >=  iii){
 		cc++ ;
 		usleep(1000);
 		iii = READ_MPEG_REG(AIU_MEM_AIFIFO_LEVEL)-EXTRA_DATA_SIZE;
 		if (cc%2000 == 0)
-			adec_print("read_buffer start in while iii = %d!!\n", iii);
+			adec_print("read_buffer start in while iii = %d!!exit_decode_thread:%d \n", iii,exit_decode_thread);
 		if(exit_decode_thread)
 			goto out;
 	}
+	#endif
+	if(( size >=  iii))
+	    return 0;
 	
 //	adec_print("read_buffer start while iii= %d!!\n", iii);
 	for(len=0;len<size;)

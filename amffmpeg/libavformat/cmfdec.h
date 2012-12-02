@@ -11,9 +11,9 @@
 typedef struct cmf {
     struct cmfvpb *cmfvpb;
     AVFormatContext *sctx;
-    AVPacket *pkt;
-    int parsering_index;
-    int chip_totalnum;
+    AVPacket pkt;
+    int64_t parsering_index;
+    int64_t calc_startpts;
 } cmf_t;
 
 

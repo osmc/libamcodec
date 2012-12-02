@@ -63,7 +63,7 @@ static int stream_rm_init(play_para_t *p_para)
             log_error("[%s:%d]real cook info error!\n", __FUNCTION__, __LINE__);
         }
         codec->audio_info.valid = 1;
-	 codec->avsync_threshold = p_para->start_param->avsync_threshold;
+        codec->avsync_threshold = p_para->start_param->avsync_threshold;
         log_print("audio_type = %d  audio_pid = %d channel= %d rate=%d\n", codec->audio_type, codec->audio_pid, codec->audio_channels, codec->audio_samplerate);
     }
     codec->stream_type = stream_type_convert(p_para->stream_type, codec->has_video, codec->has_audio);

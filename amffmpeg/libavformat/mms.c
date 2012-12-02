@@ -86,6 +86,8 @@ int ff_mms_asf_header_parser(MMSContext *mms)
             /* read packet size */
             if (end - p > sizeof(ff_asf_guid) * 2 + 68) {
                 mms->asf_packet_len = AV_RL32(p + sizeof(ff_asf_guid) * 2 + 64);
+		   mms->file_size = AV_RL64(p + sizeof(ff_asf_guid) * 2 + 8);
+		   mms->flags =AV_RL32(p+sizeof(ff_asf_guid)*2+56);
                 if (mms->asf_packet_len <= 0 || mms->asf_packet_len > sizeof(mms->in_buffer)) {
                     av_log(NULL, AV_LOG_ERROR,
                            "Corrupt stream (too large pkt_len %d)\n",

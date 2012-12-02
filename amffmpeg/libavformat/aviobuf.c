@@ -269,7 +269,24 @@ int64_t url_ftell(AVIOContext *s)
     return avio_seek(s, 0, SEEK_CUR);
 }
 #endif
-
+int url_start_user_seek(AVIOContext *s)
+{	
+	if(!s)
+		return -1;
+	s->seekflags|=LESS_READ_SEEK;
+	if(s->enabled_lp_buffer)
+		return url_lp_set_seekflags(s->opaque,LESS_READ_SEEK);
+	return 0;
+}
+int url_finished_user_seek(AVIOContext *s)
+{
+	if(!s)
+		return -1;
+	s->seekflags&=~LESS_READ_SEEK;
+	if(s->enabled_lp_buffer)
+		return url_lp_clear_seekflags(s->opaque,LESS_READ_SEEK);
+	return 0;
+}
 int64_t avio_size(AVIOContext *s)
 {
     int64_t size;
@@ -298,6 +315,10 @@ int url_feof(AVIOContext *s)
         s->eof_reached=0;
         fill_buffer(s);
     }
+   if(s->eof_reached){
+       /*if end level eof,make sure the buffer have no data.*/
+       return (s->buf_ptr >= s->buf_end);
+   }	
     return s->eof_reached;
 }
 
@@ -309,6 +330,23 @@ int url_ferror(AVIOContext *s)
     return s->error;
 }
 #endif
+
+int64_t url_fseekslicebytime(AVIOContext *s,int64_t timestamp, int flags)
+{
+	int64_t offset1;
+	if(s->exseek){
+		if((offset1=s->exseek(s->opaque, timestamp, flags))>=0)
+		{
+			if (!s->write_flag)
+				s->buf_end = s->buffer;
+			s->buf_ptr = s->buffer;
+			s->pos = 0;/*I think it is the first,pos now*/
+			s->eof_reached=0;/*clear eof error*/
+			return offset1;
+		}
+	}
+	return AVERROR(EPIPE);
+}
 int64_t url_ffulltime(AVIOContext *s)
 {
 	int64_t size;
@@ -619,7 +657,7 @@ static void fill_buffer(AVIOContext *s)
     int max_buffer_size = s->max_packet_size ? s->max_packet_size : IO_BUFFER_SIZE;
 
     /* no need to do anything if EOF already reached */
-    if (s->eof_reached)
+    if (s->eof_reached || s->error)
         return;
 
     if(s->update_checksum && dst == s->buffer){
@@ -1018,14 +1056,17 @@ int ffio_fdopen(AVIOContext **s, URLContext *h)
 #endif
 	(*s)->support_time_seek = h->support_time_seek;
 	(*s)->reallocation=h->location;
+    if(h->prot&&h->prot->name)
+	 if (h->prot&&h->prot->name &&!strncmp( h->prot->name, "cmf", 3)) {
+	 	(*s)->iscmf=1;
+	 }
     (*s)->seekable = h->is_streamed ? 0 : AVIO_SEEKABLE_NORMAL;
     (*s)->max_packet_size = max_packet_size;
     if(h->prot) {
         (*s)->read_pause = (int (*)(void *, int))h->prot->url_read_pause;
         (*s)->read_seek  = (int64_t (*)(void *, int, int64_t, int))h->prot->url_read_seek;
-	  if(h->support_time_seek>0){	
-	 	(*s)->exseek  = (int64_t (*)(void *, int, int64_t, int))h->prot->url_exseek;	
-
+	  if(NULL==(*s)->exseek ){	
+	 	(*s)->exseek  = (int64_t (*)(void *, int, int64_t, int))h->prot->url_exseek;
 	  }
     }
     return 0;
@@ -1129,7 +1170,7 @@ int avio_open_h(AVIOContext **s, const char *filename, int flags,const char * he
     URLContext *h;
     int err;
 
-    err = ffurl_open_h(&h, filename, flags,headers);
+    err = ffurl_open_h(&h, filename, flags,headers, NULL);
     if (err < 0)
         return err;
     err = ffio_fdopen(s, h);
@@ -1140,17 +1181,32 @@ int avio_open_h(AVIOContext **s, const char *filename, int flags,const char * he
     return 0;
 }
 
-
+int avio_reset(AVIOContext *s,int flags){ 
+    int ret = -1;
+    ret = url_resetbuf(s, flags);
+    s->buf_ptr = s->buffer;
+    s->pos = 0;/*I think it is the first,pos now*/
+    s->eof_reached=0;/*clear eof error*/
+    s->error = 0;
+    return  ret;
+}
 int avio_close(AVIOContext *s)
 {
     URLContext *h = s->opaque;
-	if(s->filename) av_free(s->filename);
-    av_free(s->buffer);
-    av_free(s);
-	if(h && h->lpbuf)	
-	{
-		url_lpfree(h);
-	}
+    if(s->filename){
+        av_free(s->filename);
+        s->filename = NULL;
+
+    }
+    if(s&&s->buffer){
+        av_free(s->buffer);
+        av_free(s);
+        s = NULL;
+    }
+    if(h && h->lpbuf)	
+    {
+        url_lpfree(h);
+    }
     return ffurl_close(h);
 }
 

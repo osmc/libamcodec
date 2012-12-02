@@ -1,7 +1,7 @@
 #ifndef _PLAYER_ITEMLIST_H_
 #define _PLAYER_ITEMLIST_H_
 
-#include "list.h"
+#include <am_list.h>
 #include <pthread.h>
 
 
@@ -10,6 +10,8 @@
 struct item {
     struct list_head list;
     unsigned long item_data;
+    unsigned long extdata[1];	
+    /*can be more space on alloc..*/	
 };
 
 struct itemlist {
@@ -38,6 +40,7 @@ struct item * itemlist_get_tail(struct itemlist *itemlist);
 struct item * itemlist_peek_head(struct itemlist *itemlist);
 struct item * itemlist_peek_tail(struct itemlist *itemlist);
 struct item *  itemlist_get_match_item(struct itemlist *itemlist, unsigned long data);
+struct item *  itemlist_find_match_item(struct itemlist *itemlist, unsigned long data); 
 int itemlist_del_match_data_item(struct itemlist *itemlist, unsigned long data);
 int itemlist_have_match_data(struct itemlist *itemlist, unsigned long data);
 

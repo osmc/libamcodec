@@ -22,6 +22,10 @@
 #include <codec.h>
 #include "codec_h_ctrl.h"
 
+//------------------------------
+#include <sys/times.h>
+#define msleep(n)	usleep(n*1000)
+//--------------------------------
 /* --------------------------------------------------------------------------*/
 /**
 * @brief  codec_h_open  Open codec devices by file name 
@@ -35,11 +39,24 @@
 CODEC_HANDLE codec_h_open(const char *port_addr, int flags)
 {
     int r;
+	int retry_open_times=0;
+retry_open:
     r = open(port_addr, flags);
-    if (r < 0) {
-        CODEC_PRINT("Init [%s] failed,ret = %d error=%d\n", port_addr, r, errno);
+    if (r<0 /*&& r==EBUSY*/) {
+		//--------------------------------
+	    retry_open_times++;
+	    if(retry_open_times==1)
+          CODEC_PRINT("Init [%s] failed,ret = %d error=%d retry_open!\n", port_addr, r, errno);
+	    msleep(10);
+	    if(retry_open_times<1000)
+	       goto retry_open;
+	    CODEC_PRINT("retry_open [%s] failed,ret = %d error=%d used_times=%d*10(ms)\n", port_addr,r,errno,retry_open_times);
+	    //--------------------------------
+        //CODEC_PRINT("Init [%s] failed,ret = %d error=%d\n", port_addr, r, errno);
         return r;
     }
+	if(retry_open_times>0)
+		CODEC_PRINT("retry_open [%s] success,ret = %d error=%d used_times=%d*10(ms)\n", port_addr,r,errno,retry_open_times);
     return (CODEC_HANDLE)r;
 }
 

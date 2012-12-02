@@ -58,7 +58,9 @@ static int dts_probe(AVProbeData *p)
     sum = markers[0] + markers[1] + markers[2];
     max = markers[1] > markers[0];
     max = markers[2] > markers[max] ? 2 : max;
-    if (markers[max] > 3 && p->buf_size / markers[max] < 32*1024 &&
+    if (markers[max]>100)
+        return AVPROBE_SCORE_MAX/2+1;
+    else if (markers[max] > 3 && p->buf_size / markers[max] < 32*1024 &&
         markers[max] * 4 > sum * 3)
         return AVPROBE_SCORE_MAX/4;//AVPROBE_SCORE_MAX/2+1;	//xh,20111026
 

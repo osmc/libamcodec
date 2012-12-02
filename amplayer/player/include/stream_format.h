@@ -37,7 +37,9 @@ typedef enum
     ASF_FILE        = 17,
     STREAM_FILE     = 18,
     APE_FILE		= 19,        
-    FILE_MAX		= 20,        
+    AMR_FILE        = 20,
+    AVS_FILE		= 21, 
+    FILE_MAX		= 22,        
 }pfile_type;
 
 #endif

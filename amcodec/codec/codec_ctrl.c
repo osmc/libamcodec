@@ -510,7 +510,7 @@ static inline int codec_ts_init(codec_para_t *pcodec)
         if (r < 0) {
             goto error1;
         }
-        if ((pcodec->video_type == VFORMAT_H264) || (pcodec->video_type == VFORMAT_VC1)) {
+        if ((pcodec->video_type == VFORMAT_H264) || (pcodec->video_type == VFORMAT_VC1)|| (pcodec->video_type == VFORMAT_AVS)) {
             r = set_video_codec_info(pcodec);
             if (r < 0) {
                 codec_h_close(handle);
@@ -683,6 +683,7 @@ int codec_init(codec_para_t *pcodec)
         a_ainfo.sample_rate=pcodec->audio_samplerate;
         a_ainfo.format=pcodec->audio_type;
         a_ainfo.handle=pcodec->handle;
+		a_ainfo.SessionID=pcodec->SessionID;
         if(IS_AUIDO_NEED_EXT_INFO(pcodec->audio_type))
         {
             a_ainfo.extradata_size=pcodec->audio_info.extradata_size;
@@ -1821,3 +1822,23 @@ int codec_get_sub_info(codec_para_t *pcodec, subtitle_info_t *sub_info)
     return ret;     
 }
 
+/********************************************************************************
+*
+*the interface for av sync threshold setting
+*
+*********************************************************************************/
+int codec_set_av_threshold(codec_para_t *pcodec, int threshold)
+{
+    int ret = 0;
+    if (pcodec->has_audio)
+    {
+        audio_set_av_sync_threshold(pcodec->adec_priv, threshold);
+    }
+    else
+    {
+        CODEC_PRINT("[codec_set_av_threshold] error, no audio!\n");
+        ret = -1;
+    }
+    
+    return ret;
+}

@@ -65,4 +65,5 @@ int extract_adts_header_info(play_para_t *para);
 int divx3_prefix(am_packet_t *pkt);
 int mpeg_check_sequence(play_para_t *para);
 int get_vc1_di(unsigned char *data, int length);
+int h264_write_end_header(play_para_t *para);
 #endif

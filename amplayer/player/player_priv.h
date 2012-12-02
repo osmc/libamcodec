@@ -48,7 +48,7 @@ do { \
 #define MIN_RAW_DATA_SIZE   (0x1000)        //4k
 #define RESERVE_VIDEO_SIZE  (256)
 #define RESERVE_AUDIO_SIZE  (64)
-#define MAX_PACKET_SIZE     (2*1024*1024)
+#define MAX_PACKET_SIZE     (4*1024*1024)
 #define FILE_BUFFER_SIZE    (1024*32)//(1024*512)   
 #define CHECK_END_COUNT     (40)
 #define CHECK_AUDIO_HALT_CNT (50)
@@ -77,6 +77,7 @@ do { \
 
 #define EXTERNAL_PTS        (1)
 #define SYNC_OUTSIDE       (2)
+#define USE_IDR_FRAMERATE   (4)
 #define ADTS_HEADER_SIZE    (7)
 
 #define SUBTITLE_SYNC_HIGH  0x414d4c55
@@ -135,8 +136,7 @@ typedef struct play_para {
     int             sstream_num;
     int             first_index;
     int             max_raw_size;
-    unsigned int    discontinue_point;
-	unsigned int    discontinue_last_point;
+    int    discontinue_point;     
     unsigned int    discontinue_flag;
     unsigned int    karaok_flag;
     check_end_info_t check_end;
@@ -153,6 +153,12 @@ typedef struct play_para {
     s_stream_info_t sstream_info;
     media_info_t    media_info;
 
+/*for toomany seek cmd*/	
+    player_cmd_t   oldcmd;
+    long oldcmdtime;	
+    int    oldavsyncstate;
+    int    avsynctmpchanged;
+   
     AVFormatContext *pFormatCtx;
 
     codec_para_t    *vcodec;
@@ -204,6 +210,7 @@ int message_pool_init(play_para_t *para);
 codec_para_t *get_video_codec(play_para_t *para);
 //audio
 codec_para_t *get_audio_codec(play_para_t *para);
+int player_hwbuflevel_update(play_para_t *player);
 
 int send_message(play_para_t *para, player_cmd_t *cmd);
 int send_message_by_pid(int pid, player_cmd_t *cmd);
@@ -212,7 +219,7 @@ int unlock_message_pool(play_para_t *para);
 int lock_message_pool(play_para_t *para);
 player_cmd_t * peek_message_locked(play_para_t *para);
 player_cmd_t * get_message_locked(play_para_t *para);
-
+int send_message_update(play_para_t *para, player_cmd_t *cmd);
 
 player_cmd_t * get_message(play_para_t *para);
 int update_player_states(play_para_t *para, int force);

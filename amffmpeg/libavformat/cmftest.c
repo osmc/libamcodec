@@ -66,7 +66,7 @@ static int cmftest_open(URLContext *h, const char *filename, int flags)
 {
     /// int fd;
     av_log(NULL, AV_LOG_INFO, "cmftest_open = %s\n", filename);
-    cmftest_seek(h, 0, AVSEEK_SLICE_INDEX);
+    cmftest_seek(h, 0, AVSEEK_SLICE_BYINDEX);
     ///h->priv_data = (void *) (intptr_t) fd;
     return 0;
 }
@@ -108,7 +108,7 @@ static int64_t cmftest_seek(URLContext *h, int64_t pos, int whence)
         }
         return ret < 0 ? AVERROR(errno) : st.st_size;
     }
-    if (whence == AVSEEK_SLICE_INDEX) {
+    if (whence == AVSEEK_SLICE_BYINDEX) {
 #if 1
         struct stat st;
         int64_t slice_size = 0;

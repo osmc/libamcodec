@@ -76,6 +76,7 @@ typedef struct {
     int packet_size;            ///< data size per packet
     int avsync_threshold;    ///<for adec in ms>
     void * adec_priv;          ///<for adec>
+    int SessionID;
 } codec_para_t;
 
 typedef struct 
@@ -100,6 +101,7 @@ typedef struct {
     int handle;        ///< codec device handler
     int extradata_size;      ///< extra data size
     char extradata[AUDIO_EXTRA_DATA_SIZE];
+	int SessionID;
 } arm_audio_info;
 
 //audio decoder type, default arc

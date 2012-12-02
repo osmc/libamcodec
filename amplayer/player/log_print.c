@@ -42,15 +42,15 @@ void log_lprint(const int level, const char *fmt, ...)
 
 int update_loglevel_setting(void)
 {
-	int ret;
-	char value[64];
-	if(GetSystemSettingString(LEVEL_SETING_PATH,value,NULL)>0 && (sscanf(value, "%d", &ret)) > 0){
-		log_print("get loglevel setting,loglevel changed to %d\n",ret);
-		global_level=ret;///for amplayer
-		av_log_set_level(ret);//for ffmpeg//
-	}else{
-	}
-	return 0;
+    int ret;
+    char value[64];
+    if (GetSystemSettingString(LEVEL_SETING_PATH, value, NULL) > 0 && (sscanf(value, "%d", &ret)) > 0) {
+        log_print("get loglevel setting,loglevel changed to %d\n", ret);
+        global_level = ret; ///for amplayer
+        av_log_set_level(ret);//for ffmpeg//
+    } else {
+    }
+    return 0;
 }
 
 #else
@@ -75,7 +75,7 @@ static int global_level = 5;
 
 int update_loglevel_setting(void)
 {
-	return 0;
+    return 0;
 }
 
 static int get_system_time(char *timebuf)

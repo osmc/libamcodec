@@ -8,6 +8,14 @@
 #include <sys/ioctl.h>
 #include "include/amutils_common.h"
 
+#ifndef LOGD
+    #define LOGV ALOGV
+    #define LOGD ALOGD
+    #define LOGI ALOGI
+    #define LOGW ALOGW
+    #define LOGE ALOGE
+#endif
+
 int set_sys_int(const char *path,int val)
 {
     	int fd;

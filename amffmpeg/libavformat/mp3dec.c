@@ -29,7 +29,7 @@
 
 /* mp3 read */
 
-static int mp3_read_probe(AVProbeData *p)
+static int mp123_read_probe(AVProbeData *p, int*codec_id)
 {
     int max_frames, first_frames = 0;
     int fsize, frames, sample_rate;
@@ -61,12 +61,36 @@ static int mp3_read_probe(AVProbeData *p)
     }
     // keep this in sync with ac3 probe, both need to avoid
     // issues with MPEG-files!
+    *codec_id = avctx.codec_id;
+
     if   (first_frames>=4) return AVPROBE_SCORE_MAX/2+1;
     else if(max_frames>500)return AVPROBE_SCORE_MAX/2;
     else if(max_frames>=4) return AVPROBE_SCORE_MAX/4;
     else if(max_frames>1) return 1;
     else                   return 0;
 //mpegps_mp3_unrecognized_format.mpg has max_frames=3
+}
+static int mp3_read_probe(AVProbeData *p)
+{
+  av_log(NULL, AV_LOG_ERROR, "---------------------mp3_read_probe");
+  int codec_id = 0;
+  int score = 0;
+  score = mp123_read_probe(p, &codec_id);
+  if(codec_id == CODEC_ID_MP2){
+    return 0;
+  }
+  return score;
+}
+static int mp2_read_probe(AVProbeData *p)
+{
+  av_log(NULL, AV_LOG_ERROR, "---------------------mp2_read_probe");
+  int codec_id = 0;
+  int score = 0;
+  score = mp123_read_probe(p, &codec_id);
+  if(codec_id != CODEC_ID_MP2){
+    return 0;
+  }
+  return score;
 }
 
 /**
@@ -109,8 +133,8 @@ static int mp3_parse_vbr_tags(AVFormatContext *s, AVStream *st, int64_t base)
         if(avio_rb16(s->pb) == 1) {
             /* skip delay and quality */
             avio_skip(s->pb, 4);
-            frames = avio_rb32(s->pb);
             size = avio_rb32(s->pb);
+            frames = avio_rb32(s->pb);
         }
     }
 
@@ -152,6 +176,21 @@ static int mp3_read_header(AVFormatContext *s,
 
     if (!av_dict_get(s->metadata, "", NULL, AV_DICT_IGNORE_SUFFIX))
         ff_id3v1_read(s);
+	int64_t offset=0;
+	int flag=0;
+	offset = avio_tell(s->pb);
+	avio_skip(s->pb,1);
+	avio_seek(s->pb,-1,SEEK_CUR);
+	while( (s->pb->buf_end - s->pb->buf_ptr) != 0 ) {
+		if ((*s->pb->buf_ptr == 0xff) && ((*s->pb->buf_ptr++ & 0xe0) == 0xe0) ) {
+			av_log(NULL, AV_LOG_ERROR, "## mp3 frame_header found!---------------\n");
+			flag=1;
+			s->pb->buf_ptr--;
+			break;
+		}
+		s->pb->buf_ptr++;
+	}
+	if (flag==0) avio_seek(s->pb, offset, SEEK_SET);
 
     if (mp3_parse_vbr_tags(s, st, off) < 0)
         avio_seek(s->pb, off, SEEK_SET);
@@ -191,6 +230,17 @@ AVInputFormat ff_mp3_demuxer = {
     NULL_IF_CONFIG_SMALL("MPEG audio layer 2/3"),
     0,
     mp3_read_probe,
+    mp3_read_header,
+    mp3_read_packet,
+    .flags= AVFMT_GENERIC_INDEX,
+    .extensions = "mp2,mp3,m2a", /* XXX: use probe */
+};
+
+AVInputFormat ff_mp2_demuxer = {
+    "mp2",
+    NULL_IF_CONFIG_SMALL("MPEG audio layer 2"),
+    0,
+    mp2_read_probe,
     mp3_read_header,
     mp3_read_packet,
     .flags= AVFMT_GENERIC_INDEX,

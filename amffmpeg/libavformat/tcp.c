@@ -45,21 +45,28 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
     char buf[256];
     int ret;
     socklen_t optlen;
-    int timeout = 500;
+    int timeout = 500, listen_timeout = -1;
     char hostname[1024],proto[1024],path[1024];
     char portstr[10];
 
     av_url_split(proto, sizeof(proto), NULL, 0, hostname, sizeof(hostname),
         &port, path, sizeof(path), uri);
-    if (strcmp(proto,"tcp") || port <= 0 || port >= 65536)
+    if (strcmp(proto, "tcp"))
         return AVERROR(EINVAL);
-
+    if (port <= 0 || port >= 65536) {
+        av_log(h, AV_LOG_ERROR, "Port missing in uri\n");
+        return AVERROR(EINVAL);
+    }
     p = strchr(uri, '?');
     if (p) {
         if (av_find_info_tag(buf, sizeof(buf), "listen", p))
             listen_socket = 1;
         if (av_find_info_tag(buf, sizeof(buf), "timeout", p)) {
             timeout = strtol(buf, NULL, 10);
+        }
+        if (av_find_info_tag(buf, sizeof(buf), "listen_timeout", p)) {
+            listen_timeout = strtol(buf, NULL, 10);
+
         }
     }
     memset(&hints, 0, sizeof(hints));
@@ -69,7 +76,12 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
 		hints.ai_family = AF_UNSPEC;	
     hints.ai_socktype = SOCK_STREAM;
     snprintf(portstr, sizeof(portstr), "%d", port);
-	av_log(h, AV_LOG_INFO,"TCP connect to %s port %d \n",hostname,port);
+	av_log(h, AV_LOG_INFO,"tcp will get address from dns!\n");	
+    if (listen_socket)
+        hints.ai_flags |= AI_PASSIVE;
+    if (!hostname[0])
+        ret = getaddrinfo(NULL, portstr, &hints, &ai);
+    else
     ret = getaddrinfo(hostname, portstr, &hints, &ai);
     if (ret) {
         av_log(h, AV_LOG_ERROR,
@@ -88,9 +100,29 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
 
     if (listen_socket) {
         int fd1;
+        int reuse = 1;
+        struct pollfd lp = { fd, POLLIN, 0 };
+        setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse));
         ret = bind(fd, cur_ai->ai_addr, cur_ai->ai_addrlen);
-        listen(fd, 1);
+        if (ret) {
+            ret = ff_neterrno();
+            goto fail1;
+        }
+        ret = listen(fd, 1);
+        if (ret) {
+            ret = ff_neterrno();
+            goto fail1;
+        }
+        ret = poll(&lp, 1, listen_timeout >= 0 ? listen_timeout : -1);
+        if (ret <= 0) {
+            ret = AVERROR(ETIMEDOUT);
+            goto fail1;
+        }
         fd1 = accept(fd, NULL, NULL);
+        if (fd1 < 0) {
+            ret = ff_neterrno();
+            goto fail1;
+        }
         closesocket(fd);
         fd = fd1;
         ff_socket_nonblock(fd, 1);
@@ -133,11 +165,15 @@ static int tcp_open(URLContext *h, const char *uri, int flags)
         }
         /* test error */
         optlen = sizeof(ret);
-        getsockopt (fd, SOL_SOCKET, SO_ERROR, &ret, &optlen);
+        if (getsockopt (fd, SOL_SOCKET, SO_ERROR, &ret, &optlen))
+            ret = AVUNERROR(ff_neterrno());
         if (ret != 0) {
+            char errbuf[100];
+            ret = AVERROR(ret);
+            av_strerror(ret, errbuf, sizeof(errbuf));
             av_log(h, AV_LOG_ERROR,
                    "TCP connection to %s:%d failed: %s\n",
-                   hostname, port, strerror(ret));
+                   hostname, port, errbuf);
             ret = AVERROR(ret);
             goto fail;
         }

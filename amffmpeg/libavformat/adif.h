@@ -54,6 +54,7 @@ typedef struct _ProgConfigElement {
 } ProgConfigElement;
 
 extern  int adif_header_parse(AVStream *st,ByteIOContext *pb);
+int  adts_bitrate_parse(AVFormatContext *s, int *bitrate, int64_t old_offset);
 
 
 #endif

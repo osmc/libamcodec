@@ -32,7 +32,7 @@
 
 #include "libavformat/version.h"
 
-
+#include "pthread.h"
 
 #define AVIO_SEEKABLE_NORMAL 0x0001 /**< Seeking works like for a local file */
 
@@ -48,6 +48,13 @@
  *       when implementing custom I/O. Normally these are set to the
  *       function pointers specified in avio_alloc_context()
  */
+
+/*
+if user seek.
+try less read seek,for fast seek..
+*/
+#define LESS_READ_SEEK	(0x1000)
+
 typedef struct {
     unsigned char *buffer;  /**< Start of the buffer. */
     int buffer_size;        /**< Maximum buffer size */
@@ -96,8 +103,9 @@ typedef struct {
 	int enabled_lp_buffer;
 	int support_time_seek;
 	int is_encrypted_media;
+	int iscmf;
 	int flags;
-
+	int seekflags;
 	unsigned long proppads[8];//data copyed from probed.
 } AVIOContext;
 
@@ -118,6 +126,7 @@ typedef struct URLContext {
     struct URLProtocol *prot;
 	struct  url_lpbuf  *lpbuf;
     int flags;
+    int http_code;
     int is_streamed;  /**< true if streamed (no seek possible), default = false */
     int max_packet_size;  /**< if non zero, the stream is packetized with this max packet size */
     void *priv_data;
@@ -128,6 +137,7 @@ typedef struct URLContext {
 	 int fastdetectedinfo;/*need fast detect*/
 	int support_time_seek;
 	char *location;
+	int seekflags;
 } URLContext;
 
 #define URL_PROTOCOL_FLAG_NESTED_SCHEME 1 /*< The protocol name can be the first part of a nested protocol scheme */
@@ -158,7 +168,11 @@ typedef struct URLProtocol {
 #define AVCMD_SLICE_SIZE				(1000+2)
 #define AVCMD_SLICE_DURATION			(1000+3)
 #define AVCMD_SLICE_INFO				(1000+4)
-#define AVCMD_SLICE_NUM				(1000+5)
+#define AVCMD_SLICE_INDEX				(1000+5)
+#define AVCMD_SLICE_STARTTIME               (1000+6)
+#define AVCMD_SLICE_ENDTIME                   (1000+7)
+#define AVCMD_TOTAL_DURATION			 (1000+8)
+#define AVCMD_TOTAL_NUM			        (1000+9)
     int (*url_getinfo)(URLContext *h, int cmd,int flag,void*info);
 } URLProtocol;
 
@@ -203,9 +217,14 @@ attribute_deprecated int url_poll(URLPollEntry *poll_table, int n, int timeout);
  */
 #define URL_FLAG_NONBLOCK 4
 
-typedef int URLInterruptCB(void);
-extern URLInterruptCB *url_interrupt_cb;
+typedef int URLInterruptCB(unsigned long pid);
+////extern URLInterruptCB *url_interrupt_cb;
+int url_interrupt_cb(void);
+int ffmpeg_pthread_map_init(void);
+int ffmpeg_pthread_create(pthread_t *thread_out, pthread_attr_t const * attr,
+                   void *(*start_routine)(void *), void * arg);
 
+int ffmpeg_pthread_join(pthread_t thid, void ** ret_val);
 /**
  * @defgroup old_url_funcs Old url_* functions
  * @deprecated use the buffered API based on AVIOContext instead
@@ -228,7 +247,7 @@ attribute_deprecated void url_get_filename(URLContext *h, char *buf, int buf_siz
 attribute_deprecated int av_url_read_pause(URLContext *h, int pause);
 attribute_deprecated int64_t av_url_read_seek(URLContext *h, int stream_index,
                                               int64_t timestamp, int flags);
-attribute_deprecated void url_set_interrupt_cb(int (*interrupt_cb)(void));
+attribute_deprecated void url_set_interrupt_cb(URLInterruptCB *interrupt_cb);
 
 /**
  * returns the next registered protocol after the given protocol (the first if
@@ -395,7 +414,7 @@ int avio_check(const char *url, int flags);
  * in this case by the interrupted function. 'NULL' means no interrupt
  * callback is given.
  */
-void avio_set_interrupt_cb(int (*interrupt_cb)(void));
+void avio_set_interrupt_cb(URLInterruptCB *interrupt_cb);
 
 /**
  * Allocate and initialize an AVIOContext for buffered I/O. It must be later
@@ -471,7 +490,8 @@ int avio_put_str16le(AVIOContext *s, const char *str);
 #define AVSEEK_BUFFERED_TIME 	0x40000
 #define AVSEEK_FULLTIME 		0x50000
 
-#define AVSEEK_SLICE_INDEX		0x80000	
+#define AVSEEK_SLICE_BYINDEX	(0x80000+1)	
+#define AVSEEK_SLICE_BYTIME	(0x80000+2)	
 
 
 int64_t avio_seek(AVIOContext *s, int64_t offset, int whence);
@@ -626,6 +646,7 @@ int avio_open_h(AVIOContext **s, const char *filename, int flags,const char * he
  
 int avio_close(AVIOContext *s);
 
+int avio_reset(AVIOContext *s,int flags);
 /**
  * Open a write only memory stream.
  *
@@ -705,8 +726,18 @@ static inline int url_support_time_seek(AVIOContext *s)
  int64_t url_ffulltime(ByteIOContext *s);
  int64_t url_buffed_pos(ByteIOContext *s);
  int64_t url_fbuffered_time(ByteIOContext *s);
+ int64_t url_fseekslicebytime(AVIOContext *s,int64_t timestamp, int flags);
 #define av_read_frame_flush(s) ff_read_frame_flush(s)
 int ffio_fdopen_resetlpbuf(AVIOContext *s,int lpsize);
+
+int url_lp_set_seekflags(URLContext *s,int seekflagmask);
+int url_lp_clear_seekflags(URLContext *s,int seekflagmask);
+
+int url_start_user_seek(AVIOContext *s);
+int url_finished_user_seek(AVIOContext *s);
+
+#include "libavformat/url.h"
+#include "libavformat/aviolpbuf.h"
 
 
 

@@ -8,13 +8,17 @@ LOCAL_CFLAGS := \
 LOCAL_C_INCLUDES:= \
     $(LOCAL_PATH)/include \
 
-ifneq (0, $(shell expr $(PLATFORM_VERSION) \> 4.0.0))
-    LOCAL_CFLAGS += -D_VERSION_ICS
+ifneq (0, $(shell expr $(PLATFORM_VERSION) \> 4.1.0))
+    LOCAL_CFLAGS += -D_VERSION_JB
+else
+    ifneq (0, $(shell expr $(PLATFORM_VERSION) \> 4.0.0))
+        LOCAL_CFLAGS += -D_VERSION_ICS
+    endif
 endif
 
 LOCAL_SRC_FILES := \
            adec-external-ctrl.c adec-internal-mgt.c adec-ffmpeg-mgt.c adec-message.c adec-pts-mgt.c feeder.c adec_write.c adec_read.c\
-           dsp/audiodsp-ctl.c audio_out/android-out.cpp
+           dsp/audiodsp-ctl.c audio_out/android-out.cpp audio_out/aml_resample.c audiodsp_update_format.c
 
 
 LOCAL_MODULE := libamadec
@@ -33,17 +37,24 @@ LOCAL_CFLAGS := \
 LOCAL_C_INCLUDES:= \
     $(LOCAL_PATH)/include \
 
-ifneq (0, $(shell expr $(PLATFORM_VERSION) \> 4.0.0))
-    LOCAL_CFLAGS += -D_VERSION_ICS
+ifneq (0, $(shell expr $(PLATFORM_VERSION) \> 4.1.0))
+    LOCAL_CFLAGS += -D_VERSION_JB
+else
+    ifneq (0, $(shell expr $(PLATFORM_VERSION) \> 4.0.0))
+        LOCAL_CFLAGS += -D_VERSION_ICS
+    endif
 endif
 
 LOCAL_SRC_FILES := \
            adec-external-ctrl.c adec-internal-mgt.c adec-ffmpeg-mgt.c adec-message.c adec-pts-mgt.c feeder.c adec_write.c adec_read.c\
-           dsp/audiodsp-ctl.c audio_out/android-out.cpp
+           dsp/audiodsp-ctl.c audio_out/android-out.cpp audio_out/aml_resample.c audiodsp_update_format.c
 
 LOCAL_MODULE := libamadec
 
 LOCAL_ARM_MODE := arm
+##################################################
+$(shell cp $(LOCAL_PATH)/acodec_lib/*.so $(TARGET_OUT)/lib)
+###################################################
 LOCAL_SHARED_LIBRARIES += libutils libmedia libz libbinder libdl libcutils libc
 
 LOCAL_PRELINK_MODULE := false
@@ -107,3 +118,4 @@ include $(BUILD_PHONY_PACKAGE)
 
 _audio_firmware_modules :=
 _audio_firmware :=
+

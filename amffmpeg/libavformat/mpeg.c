@@ -429,6 +429,7 @@ static int mpegps_read_packet(AVFormatContext *s,
     enum AVMediaType type;
     int64_t pts, dts, dummy_pos; //dummy_pos is needed for the index building to work
     uint8_t av_uninit(dvdaudio_substream_type);
+    int probed_videoid = 0;
 
  redo:
     len = mpegps_read_pes_header(s, &dummy_pos, &startcode, &pts, &dts);
@@ -485,6 +486,7 @@ static int mpegps_read_packet(AVFormatContext *s,
         else
             request_probe= 1;
         type = AVMEDIA_TYPE_VIDEO;
+        probed_videoid = 1;
     } else if (startcode >= 0x1c0 && startcode <= 0x1df) {
         type = AVMEDIA_TYPE_AUDIO;
         codec_id = m->sofdec > 0 ? CODEC_ID_ADPCM_ADX : CODEC_ID_MP2;
@@ -584,6 +586,7 @@ static int mpegps_read_packet(AVFormatContext *s,
     st->codec->codec_type = type;
     st->codec->codec_id = codec_id;
     st->request_probe     = request_probe;
+    st->codec->mpegps_video_idprobed = probed_videoid;
     if (codec_id != CODEC_ID_PCM_S16BE)
         st->need_parsing = AVSTREAM_PARSE_FULL;
 	}
