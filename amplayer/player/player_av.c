@@ -497,10 +497,11 @@ static int raw_read(play_para_t *para)
     float value;
     int dump_data_mode = 0;
     char dump_path[128];
+#ifdef ANDROID
     if (am_getconfig_float("media.libplayer.dumpmode", &value) == 0) {
         dump_data_mode = (int)value;
     }
-
+#endif
     if (dump_data_mode == DUMP_READ_RAW_DATA) {
         if (fdr_raw == -1) {
             sprintf(dump_path, "/temp/pid%d_dump_read.dat", para->player_id);
@@ -653,9 +654,11 @@ static int non_raw_read(play_para_t *para)
     float value;
     int dump_data_mode = 0;
     char dump_path[128];
+#ifdef ANDROID
     if (am_getconfig_float("media.libplayer.dumpmode", &value) == 0) {
         dump_data_mode = (int)value;
     }
+#endif
     if (pkt->data_size > 0) {
         if (!para->enable_rw_on_pause) {
             player_thread_wait(para, RW_WAIT_TIME);
@@ -1177,7 +1180,11 @@ int time_search(play_para_t *am_p)
     unsigned int temp = 0;
     int stream_index = -1;
     int64_t ret = PLAYER_SUCCESS;
+#ifdef ANDROID
     int seek_flags = am_getconfig_bool("media.libplayer.seek.fwdsearch") ? 0 : AVSEEK_FLAG_BACKWARD;
+#else
+    int seek_flags = AVSEEK_FLAG_BACKWARD;
+#endif
     int sample_size;
 
     url_start_user_seek(s->pb);
@@ -1389,10 +1396,11 @@ int write_av_packet(play_para_t *para)
     float value;
     int dump_data_mode = 0;
     char dump_path[128];
+#ifdef ANDROID
     if (am_getconfig_float("media.libplayer.dumpmode", &value) == 0) {
         dump_data_mode = (int)value;
     }
-
+#endif
     if (dump_data_mode == DUMP_WRITE_RAW_DATA && fdw_raw == -1) {
         sprintf(dump_path, "/temp/pid%d_dump_write.dat", para->player_id);
         fdw_raw = open(dump_path, O_CREAT | O_RDWR);
