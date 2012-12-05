@@ -2628,6 +2628,7 @@ void player_switch_audio(play_para_t *para)
     if (para->stream_type == STREAM_TS && para->vstream_info.has_video) {
         int ret;
         char value[PROPERTY_VALUE_MAX];
+#ifdef ANDROID
         ret = property_get("media.ts.switchaid.policy", value, NULL);
         if (ret > 0 && match_types("reset", value)) {
             log_print("media.ts.switchaid.policy = %s\n", value);
@@ -2636,6 +2637,7 @@ void player_switch_audio(play_para_t *para)
             player_dec_reset(para);
             set_player_state(para, PLAYER_RUNNING);
         }
+#endif
     }
     return;
 }

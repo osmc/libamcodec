@@ -275,7 +275,11 @@ static void get_av_codec_type(play_para_t *p_para)
                     pCodecCtx->profile = FF_PROFILE_AAC_MAIN;
                     /*add main profile support if choose arm audio decoder*/
                     char value[PROPERTY_VALUE_MAX];
+#ifdef ANDROID
                     int ret = property_get("media.arm.audio.decoder", value, NULL);
+#else
+                    int ret = -1;
+#endif
                     if (ret > 0 && match_types("aac", value)) {
                         log_print("AAC MAIN support by arm audio decoder!!\n");
                     } else {
@@ -567,8 +571,8 @@ static int set_decode_para(play_para_t*am_p)
     unsigned char* buf;
     ByteIOContext *pb = am_p->pFormatCtx->pb;
     int prop = -1;
-    char dts_value[PROPERTY_VALUE_MAX];
-    char ac3_value[PROPERTY_VALUE_MAX];
+    char dts_value[PROPERTY_VALUE_MAX] = "false";
+    char ac3_value[PROPERTY_VALUE_MAX] = "false";
 
     get_stream_info(am_p);
     log_print("[%s:%d]has_video=%d vformat=%d has_audio=%d aformat=%d", __FUNCTION__, __LINE__, \
@@ -628,8 +632,10 @@ static int set_decode_para(play_para_t*am_p)
     }
 
 
+#ifdef ANDROID
     property_get("media.audio.disable.dts", dts_value, NULL);
     property_get("media.audio.disable.ac3", ac3_value, NULL);
+#endif
     if ((am_p->playctrl_info.no_audio_flag) ||
         ((!strcmp(dts_value, "true")) && (am_p->astream_info.audio_format == AFORMAT_DTS)) ||
         ((!strcmp(ac3_value, "true")) && (am_p->astream_info.audio_format == AFORMAT_AC3))) {
