@@ -818,6 +818,7 @@ static int set_audio_decoder(codec_para_t *pcodec)
 	return 0;
 }
 #endif
+
 static int set_audio_decoder(int codec_id)
 {
 	int audio_id;
@@ -838,6 +839,7 @@ static int set_audio_decoder(int codec_id)
         }
     }
 	
+#ifdef ANDROID
 	ret = property_get("media.arm.audio.decoder",value,NULL);
 	adec_print("media.amplayer.audiocodec = %s, t->type = %s\n", value, t->type);
 	if (ret>0 && match_types(t->type,value))
@@ -861,6 +863,7 @@ static int set_audio_decoder(int codec_id)
 		audio_decoder = AUDIO_FFMPEG_DECODER;
 		return 0;
 	} 
+#endif
 	
 	audio_decoder = AUDIO_ARC_DECODER; //set arc decoder as default
 	return 0;
