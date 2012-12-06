@@ -17,7 +17,7 @@
 
 #include "player.h"
 #include "player_type.h"
-
+#include "streamsource.h"
 typedef enum{
     //EMU_STEP_NONE = 0,           
     EMU_STEP_PAUSE = 2,            
@@ -210,7 +210,8 @@ int main(int argc,char *argv[])
 		printf("usage:player file\n");
 		return -1;
 	}
-	player_init();		
+	player_init();
+	streamsource_init();
 	set_display_axis(0);		//move osd out of screen to set video layer out
 		
 	player_register_update_callback(&pCtrl->callback_fn,&update_player_info,1000);
