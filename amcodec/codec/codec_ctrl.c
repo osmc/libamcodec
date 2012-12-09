@@ -24,6 +24,9 @@
 #include <audio_priv.h>
 #include "codec_h_ctrl.h"
 #include <adec-external-ctrl.h>
+#ifdef ANDROID
+#include <cutils/properties.h>
+#endif
 
 #define SUBTITLE_EVENT
 #define TS_PACKET_SIZE 188
@@ -637,6 +640,15 @@ int codec_init(codec_para_t *pcodec)
     int ret;
     //if(pcodec->has_audio)
     //  audio_stop();
+#ifdef ANDROID
+    char value[PROPERTY_VALUE_MAX];
+    if (property_get("ro.platform.xbmc.support", value, NULL) > 0) {
+      if ((property_get("ro.pivos.key1", value, NULL) <= 0 || strcmp(value, "JSy9mSIWGcV8gs6x") != 0))
+        return -CODEC_ERROR_INIT_FAILED;
+    } else {
+      return -CODEC_ERROR_INIT_FAILED;
+    }
+#endif
     switch (pcodec->stream_type) {
     case STREAM_TYPE_ES_VIDEO:
         ret = codec_video_es_init(pcodec);
