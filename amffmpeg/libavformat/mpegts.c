@@ -703,7 +703,7 @@ static int mpegts_push_data(MpegTSFilter *filter,
                         goto skip;
 
                     /* stream not present in PMT */
-                    if (!pes->st) {
+                    if (ts->auto_guess && !pes->st) {
                         pes->st = av_new_stream(ts->stream, pes->pid);
                         if (!pes->st)
                             return AVERROR(ENOMEM);
@@ -1608,7 +1608,10 @@ static int mpegts_read_header(AVFormatContext *s,
 
         av_dlog(ts->stream, "tuning done\n");
 
-        s->ctx_flags |= AVFMTCTX_NOHEADER;
+        /* only flag NOHEADER if we are in file mode,
+           in streaming mode scanning may take too long for users */
+        if (!url_is_streamed(pb))
+            s->ctx_flags |= AVFMTCTX_NOHEADER;
     } else {
         AVStream *st;
         int pcr_pid, pid, nb_packets, nb_pcrs, ret, pcr_l;
