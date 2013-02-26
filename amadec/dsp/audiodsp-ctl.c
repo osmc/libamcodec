@@ -226,6 +226,9 @@ int audiodsp_start(aml_audio_dec_t *audec)
         return -3;
     }
 
+    if(audec->need_stop) //in case  stop command comes now  
+       return -5;
+
     ret = ioctl(dsp_ops->dsp_file_fd, AUDIODSP_DECODE_START, 0);
     err_count = 0;
     if(ret==0){
@@ -235,6 +238,7 @@ int audiodsp_start(aml_audio_dec_t *audec)
                 err_count++;			
                 usleep(1000*20);
                 if (err_count > PARSER_WAIT_MAX){ 
+	             ioctl(dsp_ops->dsp_file_fd, AUDIODSP_STOP, 0);//audiodsp_start failed,should stop audiodsp 								
 	             adec_print("[%s:%d] audio dsp not ready for decode PCM in 2s\n", __FUNCTION__, __LINE__);
                     return -4;	
                     }				
@@ -243,6 +247,7 @@ int audiodsp_start(aml_audio_dec_t *audec)
     }
 
     if (ret != 0) {
+	 ioctl(dsp_ops->dsp_file_fd, AUDIODSP_STOP, 0);//audiodsp_start failed,should stop audiodsp 					
         return -4;
     }
 

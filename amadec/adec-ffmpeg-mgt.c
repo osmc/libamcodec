@@ -894,7 +894,10 @@ static int get_frame_size(int format)
                 }
                 else{
                     start_code.size=3;
-                    memcpy(start_code.buff,&start_code.buff[1],3);
+                    //memcpy(start_code.buff,&start_code.buff[1],3);
+                    start_code.buff[0] = start_code.buff[1];
+                    start_code.buff[1] = start_code.buff[2];
+                    start_code.buff[2] = start_code.buff[3];
                     return 0;
                 }
               }
@@ -964,7 +967,7 @@ exit_decode_loop:
                 int nRet=0;
                 int nReadErrCount=0;
                 int nCurrentReadCount=0;
-                int nReadSizePerTime=10*1024;
+                int nReadSizePerTime=1*1024;
                 rlen=0;
                 while(nNextReadSize>0)
                 {
@@ -989,7 +992,7 @@ exit_decode_loop:
                     //add failed
                     if(exit_decode_thread)
 	                goto exit_decode_loop;
-	             usleep(100000);
+	             usleep(1000);
                 }
                 inbuf=NULL;
         }
@@ -1064,19 +1067,25 @@ exit_decode_loop:
 	      {
 	        if((g_AudioInfo.channels !=g_bst->channels)||(g_AudioInfo.samplerate!=g_bst->samplerate))
 	        {
-	            //adec_print("====Info Changed: src:sample:%d  channel:%d dest sample:%d  channel:%d \n",g_bst->samplerate,g_bst->channels,g_AudioInfo.samplerate,g_AudioInfo.channels);
-	            if(aout_stop_mutex==0)
+	            adec_print("====Info Changed: src:sample:%d  channel:%d dest sample:%d  channel:%d \n",g_bst->samplerate,g_bst->channels,g_AudioInfo.samplerate,g_AudioInfo.channels);
+				audec->format_changed_flag = 1;
+				g_bst->channels=audec->channels=g_AudioInfo.channels;
+				g_bst->samplerate=audec->samplerate=g_AudioInfo.samplerate;
+				
+#if 0
+				if(aout_stop_mutex==0)
 	            {
         	            aout_stop_mutex=1;
-        	            g_bst->channels=audec->channels=g_AudioInfo.channels;
-                           g_bst->samplerate=audec->samplerate=g_AudioInfo.samplerate;
         	            //send Message
         	            //reset param
-        	            aout_ops->stop(audec);
-        	            aout_ops->init(audec);
-        	            aout_ops->start(audec);
+        	            
+    	            	aout_ops->stop(audec);
+						aout_ops->init(audec);
+						aout_ops->start(audec);
         	            aout_stop_mutex=0;
 	            }
+#endif				
+				
 	        }
 	      }
 	      //step 2  get read buffer size
@@ -1177,7 +1186,7 @@ exit_decode_loop:
               else
               {
                    //get data failed,maybe at the end
-                   usleep(100000);
+                   usleep(1000);
                    continue;
               }
 	}
@@ -1228,6 +1237,7 @@ void *adec_armdec_loop(void *args)
         //  continue;
         //}
         
+        adec_reset_track(audec);
         adec_flag_check(audec);
 
         msg = adec_get_message(audec);

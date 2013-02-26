@@ -51,6 +51,7 @@ int audio_decode_init(void **handle, arm_audio_info *a_ainfo)
     audec->adsp_ops.dsp_file_fd=a_ainfo->handle;
     audec->extradata_size=a_ainfo->extradata_size;
 	audec->SessionID=a_ainfo->SessionID;
+	audec->dspdec_not_supported = a_ainfo->dspdec_not_supported;
     if(a_ainfo->extradata_size>0&&a_ainfo->extradata_size<=AUDIO_EXTRA_DATA_SIZE)
         memcpy((char*)audec->extradata,(char*)a_ainfo->extradata,a_ainfo->extradata_size);
    
@@ -229,7 +230,8 @@ int audio_decode_automute(void *handle, int stat)
         return -1;
     }
     adec_print("set automute!\n");
-    audec->auto_mute = 1;
+    //audec->auto_mute = 1;
+    audec->auto_mute = stat;
     return 0;
 }
 

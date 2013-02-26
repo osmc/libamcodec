@@ -85,7 +85,13 @@ typedef enum {
 										||(afmt == AFORMAT_COOK) \
 										/*||(afmt == AFORMAT_FLAC)*/)
 
-#define IS_AUIDO_NEED_PREFEED_HEADER(afmt) ((afmt == AFORMAT_VORBIS) )
+#define IS_AUDIO_NOT_SUPPORT_EXCEED_6CH(afmt) ((afmt == AFORMAT_WMAPRO))
+#define IS_AUDIO_NOT_SUPPORT_EXCEED_FS48k(afmt) ((afmt == AFORMAT_WMAPRO))
 
+
+#define IS_AUIDO_NEED_PREFEED_HEADER(afmt) ((afmt == AFORMAT_VORBIS) )
+#define IS_AUDIO_NOT_SUPPORTED_BY_AUDIODSP(afmt,codec)  \
+							((afmt == AFORMAT_AAC_LATM || afmt == AFORMAT_AAC) \
+							 &&codec->profile == 0/* FF_PROFILE_AAC_MAIN*/)
 #endif /* AFORMAT_H */
 

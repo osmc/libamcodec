@@ -81,6 +81,7 @@ unsigned int noblock:
     int avsync_threshold;    ///<for adec in ms>
     void * adec_priv;          ///<for adec>
     int SessionID;
+	int dspdec_not_supported;//check some profile that audiodsp decoder can not support,we switch to arm decoder
 } codec_para_t;
 
 typedef struct 
@@ -106,6 +107,7 @@ typedef struct {
     int extradata_size;      ///< extra data size
     char extradata[AUDIO_EXTRA_DATA_SIZE];
 	int SessionID;
+	int dspdec_not_supported;//check some profile that audiodsp decoder can not support,we switch to arm decoder	
 } arm_audio_info;
 
 //audio decoder type, default arc

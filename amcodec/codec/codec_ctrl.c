@@ -696,6 +696,7 @@ int codec_init(codec_para_t *pcodec)
         a_ainfo.format=pcodec->audio_type;
         a_ainfo.handle=pcodec->handle;
 		a_ainfo.SessionID=pcodec->SessionID;
+		a_ainfo.dspdec_not_supported = pcodec->dspdec_not_supported;
         if(IS_AUIDO_NEED_EXT_INFO(pcodec->audio_type))
         {
             a_ainfo.extradata_size=pcodec->audio_info.extradata_size;
@@ -805,11 +806,13 @@ void codec_resume_audio(codec_para_t *pcodec, unsigned int orig)
 {
     pcodec->has_audio = orig;
     if (pcodec->has_audio) {
-        arm_audio_info a_ainfo;
-        a_ainfo.channels = pcodec->audio_channels;
-        a_ainfo.sample_rate = pcodec->audio_samplerate;
-        a_ainfo.format = pcodec->audio_type;
-        a_ainfo.handle = pcodec->handle;
+		arm_audio_info a_ainfo;
+        memset(&a_ainfo,0,sizeof(arm_audio_info));
+        a_ainfo.channels=pcodec->audio_channels;
+        a_ainfo.sample_rate=pcodec->audio_samplerate;
+        a_ainfo.format=pcodec->audio_type;
+        a_ainfo.handle=pcodec->handle;
+		a_ainfo.dspdec_not_supported = pcodec->dspdec_not_supported;
         if(IS_AUIDO_NEED_EXT_INFO(pcodec->audio_type))
         {
             a_ainfo.extradata_size=pcodec->audio_info.extradata_size;
@@ -818,6 +821,7 @@ void codec_resume_audio(codec_para_t *pcodec, unsigned int orig)
             else
                 a_ainfo.extradata_size=0;
         }
+		
         audio_start(&pcodec->adec_priv, &a_ainfo);
     }
     return;

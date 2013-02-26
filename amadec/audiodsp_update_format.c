@@ -80,7 +80,8 @@ void adec_reset_track(aml_audio_dec_t *audec)
         out_ops->stop(audec);
 		//audec->SessionID +=1;
         out_ops->init(audec);
-        out_ops->start(audec);
+		if(audec->state == ACTIVE)
+        	out_ops->start(audec);
 	    audec->format_changed_flag=0;
 	}
 }
@@ -92,7 +93,7 @@ int audiodsp_format_update(aml_audio_dec_t *audec)
     unsigned long val;
     dsp_operations_t *dsp_ops = &audec->adsp_ops;
 	
-    if (dsp_ops->dsp_file_fd < 0) {
+    if (dsp_ops->dsp_file_fd < 0 || get_audio_decoder()!=AUDIO_ARC_DECODER) {
         return ret;
     }
 	

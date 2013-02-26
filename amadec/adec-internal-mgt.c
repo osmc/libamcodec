@@ -818,8 +818,7 @@ static int set_audio_decoder(codec_para_t *pcodec)
 	return 0;
 }
 #endif
-
-static int set_audio_decoder(int codec_id)
+static int set_audio_decoder(aml_audio_dec_t *audec)
 {
 	int audio_id;
 	int i;	
@@ -829,7 +828,7 @@ static int set_audio_decoder(int codec_id)
 	char value[PROPERTY_VALUE_MAX];
 	
 
-	audio_id = codec_id;
+	audio_id = audec->format;
 
     num = ARRAY_SIZE(audio_type);
     for (i = 0; i < num; i++) {
@@ -852,7 +851,12 @@ static int set_audio_decoder(int codec_id)
 	adec_print("media.amplayer.audiocodec = %s, t->type = %s\n", value, t->type);
 	if (ret>0 && match_types(t->type,value))
 	{	
-		audio_decoder = AUDIO_ARC_DECODER;
+		if(audec->dspdec_not_supported == 0)
+			audio_decoder = AUDIO_ARC_DECODER;
+		else{
+			audio_decoder = AUDIO_ARM_DECODER;	
+			adec_print("[%s:%d]arc decoder not support this audio yet,switch to ARM decoder \n",__FUNCTION__, __LINE__);
+		}
 		return 0;
 	} 
 	
@@ -866,6 +870,10 @@ static int set_audio_decoder(int codec_id)
 #endif
 	
 	audio_decoder = AUDIO_ARC_DECODER; //set arc decoder as default
+	if(audec->dspdec_not_supported == 1){
+		audio_decoder = AUDIO_ARM_DECODER;	
+		adec_print("[%s:%d]arc decoder not support this audio yet,switch to ARM decoder \n",__FUNCTION__, __LINE__);
+	}	
 	return 0;
 }
 
@@ -903,7 +911,7 @@ int audiodec_init(aml_audio_dec_t *audec)
     adec_message_pool_init(audec);
     get_output_func(audec);
     int nCodecType=audec->format;
-    set_audio_decoder(nCodecType);
+    set_audio_decoder(audec);
     audec->format_changed_flag=0;
     if (get_audio_decoder() == AUDIO_ARC_DECODER) {
     		audec->adsp_ops.dsp_file_fd = -1;

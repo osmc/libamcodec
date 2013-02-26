@@ -69,6 +69,7 @@ struct aml_audio_dec {
     char extradata[AUDIO_EXTRA_DATA_SIZE];
 	int SessionID;
 	int format_changed_flag;
+	unsigned dspdec_not_supported;//check some profile that audiodsp decoder can not support,we switch to arm decoder	
 };
 
 //from amcodec
@@ -80,6 +81,7 @@ typedef struct {
     int extradata_size;      ///< extra data size
     char extradata[AUDIO_EXTRA_DATA_SIZE];
 	int SessionID;
+	int dspdec_not_supported;//check some profile that audiodsp decoder can not support,we switch to arm decoder	
 } arm_audio_info;
 //status check
 struct adec_status {
