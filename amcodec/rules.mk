@@ -18,12 +18,10 @@ ar_mk=$(Q)echo "LD $(1)";\
 
 
 ld_mk=$(Q)echo "LD $(1) $(2)  $(3)";\
-		$(CC) $(LDFLAGS)  \
-		--start-group	\
+		$(CC) \
 		$(2:%-dir=%/build-in.o) \
 		$(3:%-dir=%/build-in.o) \
-		--end-group    \
-		-o $(1) 	
+		$(LDFLAGS) -o $(1)
 				
 clr_mk=$(Q)echo "CLEAN  $(1)";\
 		$(MAKE) -C ${1} -f ${SRCTREE}/clean.mk

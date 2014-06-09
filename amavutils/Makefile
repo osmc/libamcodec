@@ -15,6 +15,10 @@ export CC CFLAGS
 all: $(TARGET) 
 
 $(TARGET): $(TARGET_OBJS)
+	echo "CC=$(CC)"
+	echo "LD=$(LD)"
+	echo "CFLAGS=$(CFLAGS)"
+	echo "LDFLAGS=$(LDFLAGS)"
 	$(CC) $(CFLAGS) $(LDFLAGS) $(TARGET_OBJS:%.o=%.c) -o $@  
 
 clean:

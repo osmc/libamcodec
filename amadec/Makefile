@@ -17,12 +17,10 @@ TARGET_OBJS += audiodsp_update_format.c
 
 INSTALL_DIR=${M_PREFIX}/lib
 
-LDFLAGS += -shared -lpthread -lm -lasound -lrt
+LDFLAGS += -shared -lpthread -lm -lasound -lrt -ldl
 
-TARGET_DIR=$(shell pwd)/../../../target
-STAGING_DIR=$(shell pwd)/../../../staging
 CFLAGS+=-O2
-CFLAGS+=-I$(shell pwd) -I$(shell pwd)/include -I${STAGING_DIR}/include -I${STAGING_DIR}/usr/include -L${TARGET_DIR}/lib -L${TARGET_DIR}/usr/lib
+CFLAGS+=-I$(shell pwd) -I$(shell pwd)/include -I${PREFIX}/include -I${PREFIX}/usr/include -L${PREFIX}/lib -L${PREFIX}/usr/lib
 CFLAGS+=-DALSA_OUT -DENABLE_WAIT_FORMAT
 
 export CC CFLAGS
@@ -30,7 +28,7 @@ export CC CFLAGS
 all: $(TARGET) 
 
 $(TARGET): $(TARGET_OBJS)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(TARGET_OBJS:%.o=%.c) -o $@  
+	$(CC) $(CFLAGS) $(TARGET_OBJS:%.o=%.c) $(LDFLAGS) -o $@  
 
 install:$(TARGET)
 	-install -m 555 ${TARGET} $(INSTALL_DIR)
