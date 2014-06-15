@@ -1446,8 +1446,17 @@ static int avi_read_seek(AVFormatContext *s, int stream_index, int64_t timestamp
     st = s->streams[stream_index];
     ast= st->priv_data;
     index= av_index_search_timestamp(st, timestamp * FFMAX(ast->sample_size, 1), flags);
-    if(index<0)
-        return -1;
+
+    if(index<0){
+         int flags_revert=((flags&AVSEEK_FLAG_BACKWARD)?(flags&~AVSEEK_FLAG_BACKWARD):(flags|AVSEEK_FLAG_BACKWARD));
+         av_log(s, AV_LOG_INFO,"[%s %d]original seek_direction(flag/%d) failed, revert seek_direction(flag/%d)\n",
+                   __FUNCTION__,__LINE__,flags,flags_revert);
+         index= av_index_search_timestamp(st, timestamp * FFMAX(ast->sample_size, 1), flags_revert);
+         if(index<0){
+            av_log(NULL, AV_LOG_ERROR, "[%s] revert seek failed!! flag/%d\n",__FUNCTION__,flags_revert);
+            return -1;
+         }
+    }
 
     /* find the position */
     pos = st->index_entries[index].pos;

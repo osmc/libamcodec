@@ -22,6 +22,7 @@
 #include "libavutil/avstring.h"
 #include "avformat.h"
 #include <unistd.h>
+#include<time.h>
 #include <strings.h>
 #include "internal.h"
 #include "network.h"
@@ -30,8 +31,7 @@
 #include "httpauth.h"
 #include "url.h"
 #include "libavutil/opt.h"
-#include <sys/time.h>
-
+#include "bandwidth_measure.h" 
 /* XXX: POST protocol is not completely implemented because ffmpeg uses
    only a subset of it. */
 
@@ -45,6 +45,7 @@
 #define OPEN_RETRY_MAX 3
 #define READ_RETRY_MAX 3
 #define MAX_CONNECT_LINKS 1
+#define READ_SEEK_TIMES 10
 
 #define READ_RETRY_MAX_TIME_MS (120*1000) 
 /*60 seconds no data get,we will reset it*/
@@ -66,10 +67,14 @@ typedef struct {
     HTTPAuthState auth_state;
     unsigned char headers[BUFFER_SIZE];
     int willclose;          /**< Set if the server correctly handles Connection: close and will close the connection after feeding us the content. */
-	int is_seek;
-	int canseek;
-	int max_connects;
-	int latest_get_time_ms;
+    int is_seek;
+    int canseek;
+    int max_connects;
+    int latest_get_time_ms;
+    int is_broadcast;
+    int read_seek_count;
+    void * bandwidth_measure;	
+    char hosname[1024];    
 } HTTPContext;
 
 #define OFFSET(x) offsetof(HTTPContext, x)
@@ -122,7 +127,7 @@ static int http_open_cnx(URLContext *h)
     const char *path, *proxy_path;
     char hostname[1024], hoststr[1024];
     char auth[1024];
-    char path1[1024];
+    char path1[MAX_URL_SIZE];
     char buf[1024];
     int port, use_proxy, err, location_changed = 0, redirects = 0;
     HTTPAuthType cur_auth_type;
@@ -152,8 +157,10 @@ static int http_open_cnx(URLContext *h)
     }
     if (port < 0)
         port = 80;
- 
+    
     ff_url_join(buf, sizeof(buf), "tcp", NULL, hostname, port, NULL);
+    strcpy(s->hosname, hostname);
+    av_log(h, AV_LOG_INFO, "s->hostname ,%s\n",s->hosname);
     if (!s->hd) {      
         err = ffurl_open(&hd, buf, AVIO_FLAG_READ_WRITE);
         if (err < 0){
@@ -213,7 +220,7 @@ static int http_reopen_cnx(URLContext *h,int64_t off)
     int64_t old_chunksize=s->chunksize ;	
 	int old_buf_size=0;
 	char old_buf[BUFFER_SIZE];
-	av_log(h, AV_LOG_INFO, "[%s]off=%d s->off=%d\n", __FUNCTION__, off, s->off);
+	av_log(h, AV_LOG_INFO, "[%s]off=%lld s->off=%lld\n", __FUNCTION__, off, s->off);
     if(off>=0)
 		s->off = off;	
     	/* if it fails, continue on old connection */
@@ -248,7 +255,7 @@ static int http_reopen_cnx(URLContext *h,int64_t off)
     		s->buf_end = s->buffer;
 		s->chunksize=-1;
 	        s->hd = 0;
-	        s->off = 0;
+	        s->off = old_off;
 	        return -1;
 		}
     }
@@ -266,14 +273,26 @@ static int http_open(URLContext *h, const char *uri, int flags)
 	int open_retry=0;
     h->is_streamed = 1;
     s->hd = NULL;
+
+    int retry_times=0;
+    float value=0.0;
+    int config_ret=am_getconfig_float("libplayer.http.openretry",&value);
+    if(config_ret<0){
+    	 retry_times=OPEN_RETRY_MAX;
+    }else{
+        retry_times=(int)value;
+    }
 	
     s->filesize = -1;
-	s->is_seek=1;
-	s->canseek=1;
+    s->is_seek=1;
+    s->canseek=1;
+    s->is_broadcast = 0;
+    s->read_seek_count = 0;
     av_strlcpy(s->location, uri, sizeof(s->location));
 	s->max_connects=MAX_CONNECT_LINKS;	
+    s->bandwidth_measure=bandwidth_measure_alloc(100,0); 	
 	ret = http_open_cnx(h);
-	while(ret<0 && open_retry++<OPEN_RETRY_MAX && !url_interrupt_cb() && (s->http_code != 404 ||s->http_code != 503)){
+	while(ret<0 && open_retry++<retry_times && !url_interrupt_cb() && (s->http_code != 404 ||s->http_code != 503 || s->http_code != 500)){
 		s->is_seek=0;
 		s->canseek=0;
     	ret = http_open_cnx(h);
@@ -284,17 +303,30 @@ static int http_open(URLContext *h, const char *uri, int flags)
 static int shttp_open(URLContext *h, const char *uri, int flags)
 {
     HTTPContext *s = h->priv_data;
-	int ret;
-	int open_retry=0;
+    int ret;
+    int open_retry=0;
+
+    int retry_times=0;
+    float value=0.0;
+    int config_ret=am_getconfig_float("libplayer.http.openretry",&value);
+    if(config_ret<0){
+    	 retry_times=OPEN_RETRY_MAX;
+    }else{
+        retry_times=(int)value;
+    }
+    
     h->is_streamed = 1;
-     s->hd = NULL;
+    s->hd = NULL;
     s->filesize = -1;
-	s->is_seek=1;
-	s->canseek=1;
+    s->is_seek=1;
+    s->canseek=1;
+    s->is_broadcast = 0;
+    s->read_seek_count = 0;
     av_strlcpy(s->location, uri+1, sizeof(s->location));	
 	s->max_connects=MAX_CONNECT_LINKS;	
+    s->bandwidth_measure=bandwidth_measure_alloc(100,0); 		
 	ret = http_open_cnx(h);
-	while(ret<0 && open_retry++<OPEN_RETRY_MAX && !url_interrupt_cb()){
+	while(ret<0 && open_retry++<retry_times && !url_interrupt_cb()){
 		s->is_seek=0;
 		s->canseek=0;
     	ret = http_open_cnx(h);
@@ -312,6 +344,8 @@ static int http_getc(HTTPContext *s)
     int retry=0;
     if (s->buf_ptr >= s->buf_end) {
 		do {
+		if(retry++>0)
+		 	return AVERROR(EIO);
 	        len = ffurl_read(s->hd, s->buffer, BUFFER_SIZE);
 	        if (len < 0 && len != AVERROR(EAGAIN)) {
 				av_log(NULL, AV_LOG_ERROR, "http_getc failed\n");
@@ -323,8 +357,8 @@ static int http_getc(HTTPContext *s)
 	        	s->buf_ptr = s->buffer;
 				s->buf_end = s->buffer + len;
 	        }	
-		 if(retry++>10)
-		 	return AVERROR(EIO);/*10 times,avoid alway no return problem*/
+		 //if(retry++>10)
+		 //	return AVERROR(EIO);/*10 times,avoid alway no return problem*/
 		}while (len == AVERROR(EAGAIN));		
     }
     return *s->buf_ptr++;
@@ -395,7 +429,16 @@ static int process_line(URLContext *h, char *line, int line_count,
         while (isspace(*p))
             p++;
         if (!strcasecmp(tag, "Location")) {
-            strcpy(s->location, p);
+	      memset(s->location,0,MAX_URL_SIZE);
+	     if(strncmp(p,"http",4)==0)  
+             strcpy(s->location, p);
+           else{
+              strcpy(s->location,"http://");
+              av_strlcat(s->location, s->hosname,sizeof(s->location));
+              av_strlcat(s->location, p,sizeof(s->location));
+           }
+            av_log(h, AV_LOG_ERROR, "s->location=%s\n",s->location);
+      
             *new_location = 1;
         } else if (!strcasecmp (tag, "Content-Length") && s->filesize == -1) {
             s->filesize = atoll(p);
@@ -411,7 +454,9 @@ static int process_line(URLContext *h, char *line, int line_count,
                 if ((slash = strchr(p, '/')) && strlen(slash) > 0)
                     s->filesize = atoll(slash+1);
             }
-            h->is_streamed = 0; /* we _can_ in fact seek */
+            /* seek when we get real file size */
+            if(s->filesize>0)
+                h->is_streamed = 0; /* we _can_ in fact seek */
         } else if (!strcasecmp (tag, "Transfer-Encoding") && !strncasecmp(p, "chunked", 7)) {
             s->filesize = -1;
             s->chunksize = 0;
@@ -426,6 +471,27 @@ static int process_line(URLContext *h, char *line, int line_count,
             if (!strncmp(p, "Octoshape-Ondemand", strlen("Octoshape-Ondemand")))
                 h->is_streamed = 0;     /* Octoshape-Ondemand http server support seek */
                 av_log(h, AV_LOG_INFO, "Octoshape-Ondemand support seek!\n");
+        }else if(!strcasecmp (tag, "Pragma")){
+            if( strstr( p, "features" ) )
+            {
+                /* FIXME, it is a bit badly done here ..... */
+                if( strstr( p, "broadcast" ) )
+                {
+                    av_log(h, AV_LOG_INFO, "stream type = broadcast\n" );
+                    s->is_broadcast  = 1;                    
+                }
+                else if( strstr( p, "seekable" ) )
+                {
+                    av_log( h, AV_LOG_INFO, "stream type = seekable\n" );
+                    s->is_broadcast  = 0;
+                }
+                else
+                {
+                    av_log( h, AV_LOG_INFO, "unknow stream types (%s)\n", p );
+                    s->is_broadcast = 0;                    
+                }
+            }
+
         }
     }
     return 1;
@@ -442,13 +508,11 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
 {
     HTTPContext *s = h->priv_data;
     int post, err;
-    char line[1024];
+    char line[MAX_URL_SIZE];
     char headers[1024*4] = "";
     char *authstr = NULL;
     int64_t off = s->off;
-    int len = 0;
-
-
+    int len = 0;    	
     /* send http header */
     post = h->flags & AVIO_FLAG_WRITE;
     authstr = ff_http_auth_create_response(&s->auth_state, auth, path,
@@ -470,7 +534,7 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
         len += av_strlcpy(headers + len, "Accept: */*\r\n",
                           sizeof(headers) - len);	
     if (!has_header(s->headers, "\r\nRange: ") && (s->off>0 || s->is_seek)
-        &&!has_header(headers, "\r\nRange: ")/*&&!s->hd->is_streamed*/)
+        &&!has_header(headers, "\r\nRange: ")&&!h->is_segment_media/*&&!s->hd->is_streamed*/)
         len += av_strlcatf(headers + len, sizeof(headers) - len,
                            "Range: bytes=%"PRId64"-\r\n", s->off);
     if (!has_header(s->headers, "\r\nConnection: ")&&!has_header(headers, "\r\nConnection: "))
@@ -523,8 +587,7 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
     for(;;) {
         if (http_get_line(s, line, sizeof(line)) < 0)
             return AVERROR(EIO);
-
-        av_dlog(NULL, "header='%s'\n", line);
+        av_dlog(NULL, "header='%s'\n", line);	
 		
         err = process_line(h, line, s->line_count, new_location);
 		
@@ -540,6 +603,8 @@ static int http_connect(URLContext *h, const char *path, const char *hoststr,
 		/*server can't support seek,the off is ignored.we do read seek later;*/
 		s->do_readseek_size=off-s->off;
 		s->off=off;
+		if(s->do_readseek_size >= s->filesize - 1024) // we could not get rest data sometime when server in problem, this can prevent unlimited retry.
+			s->read_seek_count++;
 		av_log(h, AV_LOG_INFO, "Server Can't support SEEK,we try do read seek to resume playing readseek size=%lld\n",s->do_readseek_size);
      }
 	return (off == s->off) ? 0 : -1;
@@ -552,10 +617,24 @@ static int http_read(URLContext *h, uint8_t *buf, int size)
 
     HTTPContext *s = h->priv_data;
     int len;
-    int err_retry=READ_RETRY_MAX;
+    int retry_times=0;
+    float value=0.0;
+    int config_ret=am_getconfig_float("libplayer.http.readretry",&value);
+    if(config_ret<0){
+    	 retry_times=READ_RETRY_MAX;
+    }else{
+        retry_times=(int)value;
+    }
+    int err_retry=retry_times;
+    if(s->filesize>0&&s->off == s->filesize){
+        av_log(h, AV_LOG_INFO, "http_read maybe reach EOS,force to exit,current: %lld,file size:%lld\n",s->off,s->filesize);        
+        return 0;
+    }
+    bandwidth_measure_start_read(s->bandwidth_measure);	
 retry:
     if (url_interrupt_cb()) {
         av_log(h, AV_LOG_INFO, "http_read interrupt, err :-%d\n", AVERROR(EIO));
+        bandwidth_measure_finish_read(s->bandwidth_measure,0);		
         return AVERROR(EIO);
     }
     if (s->chunksize >= 0) {
@@ -566,6 +645,7 @@ retry:
                 do {
                     if (http_get_line(s, line, sizeof(line)) < 0){
                         av_log(h, AV_LOG_ERROR, "http_read failed\n");
+			     bandwidth_measure_finish_read(s->bandwidth_measure,0);			
                         return AVERROR(EIO);
                     }   
                 } while (!*line);    /* skip CR LF from last chunk */
@@ -576,6 +656,7 @@ retry:
 
                 if (!s->chunksize){
                     av_log(h, AV_LOG_ERROR, "http_read s->chunksize failed\n");
+			 bandwidth_measure_finish_read(s->bandwidth_measure,0);		
                     return 0;
                 }	
                 break;
@@ -593,13 +674,14 @@ retry:
     } else {
         if (!s->willclose && s->filesize >= 0 && s->off >= s->filesize){
             av_log(h, AV_LOG_ERROR, "http_read eof len=%d\n",len);
+	      bandwidth_measure_finish_read(s->bandwidth_measure,0);	
             return 0;
         }
         if(s->hd){
             len = ffurl_read(s->hd, buf, size);
         }else{
             av_log(h, AV_LOG_INFO, "http read hd not opened,force to retry open\n");
-            len=-1;/*hd not opened,force to retry open*/
+            len=-1000;/*hd not opened,force to retry open*/
             goto errors;
         }
         //av_log(h, AV_LOG_ERROR, "ffurl_read %d\n",len);
@@ -628,15 +710,22 @@ retry:
 	}else{
 		s->latest_get_time_ms=0;/*0 means have  just get data*/
 	}
-	if(len==0 && (s->off < s->filesize-10)){
+	if(len==0 && (s->off < s->filesize-10) && s->read_seek_count < READ_SEEK_TIMES){
 		av_log(h, AV_LOG_INFO, "http_read return 0,but off not reach filesize,maybe close by server try again\n");
-		len=-1;/*force to retry,if else data <10,don't do it*/
+		len=-1000;/*force to retry,if else data <10,don't do it*/
 	}
 errors:
-	if(len<0)
+	if(len<0){
 		av_log(h, AV_LOG_ERROR, "len=-%d err_retry=%d\n", -len, err_retry);	
-	if(len<0 && len!=AVERROR(EAGAIN)&& err_retry-->0 && !url_interrupt_cb())
-	{
+		if(s->filesize>0&&s->off == s->filesize){
+			av_log(h, AV_LOG_INFO, "http_read maybe reach EOS,current: %lld,file size:%lld\n",s->off,s->filesize);
+			bandwidth_measure_finish_read(s->bandwidth_measure,0);
+			return 0;
+		}
+
+	}
+	if(len<0 && len!=AVERROR(EAGAIN)/*&&!h->is_segment_media*/&&err_retry-->0 /*&& !url_interrupt_cb()*/)
+	{		
 		av_log(h, AV_LOG_INFO, "http_read failed err try=%d\n", err_retry);
 		http_reopen_cnx(h,-1);
 		goto retry;
@@ -652,6 +741,7 @@ errors:
 			goto retry;
 		}
 	}
+	bandwidth_measure_finish_read(s->bandwidth_measure,len);
 	return len;
 
 }
@@ -701,7 +791,7 @@ int ff_http_do_new_request(URLContext *h, const char *uri)
     s->canseek=1;
     ret = http_open_cnx(h);
     
-    while(ret<0 && open_retry++<OPEN_RETRY_MAX && !url_interrupt_cb()){
+    while(ret<0 && open_retry++<OPEN_RETRY_MAX && !url_interrupt_cb()&& (s->http_code != 404 ||s->http_code != 503 || s->http_code != 500)){
         s->is_seek=0;
         s->canseek=0;
         ret = http_open_cnx(h);
@@ -723,6 +813,7 @@ static int http_close(URLContext *h)
 
     if (s->hd)
         ffurl_close(s->hd);
+    bandwidth_measure_free(s->bandwidth_measure);	
     return ret;
 }
 
@@ -770,7 +861,34 @@ http_get_file_handle(URLContext *h)
     HTTPContext *s = h->priv_data;
     return ffurl_get_file_handle(s->hd);
 }
+int ff_http_get_broadcast_flag(URLContext *h){
+    if(h == NULL){
+        return 0;
+    }
+    HTTPContext *s = h->priv_data;
+    if(s!=NULL){
+        return s->is_broadcast;
+    }
+    return 0;
 
+}
+
+static int http_get_info(URLContext *h, uint32_t  cmd, uint32_t flag, int64_t *info){
+	if(h == NULL){
+		return -1;		
+	}
+	HTTPContext *s = h->priv_data;
+	if(s!=NULL&&cmd == AVCMD_GET_NETSTREAMINFO){
+		if(flag == 1){//download speed
+			int mean_bps, fast_bps, avg_bps,ret = -1;     
+			ret = bandwidth_measure_get_bandwidth(s->bandwidth_measure,&fast_bps, &mean_bps, &avg_bps);
+			*info = avg_bps;
+		}
+		return 0;	
+	}
+	return -1;    
+
+}
 URLProtocol ff_http_protocol = {
     .name                = "http",
     .url_open            = http_open,
@@ -778,6 +896,7 @@ URLProtocol ff_http_protocol = {
     .url_write           = http_write,
     .url_seek            = http_seek,
     .url_close           = http_close,
+    .url_getinfo 	  = http_get_info,    
     .url_get_file_handle = http_get_file_handle,
     .priv_data_size      = sizeof(HTTPContext),
     .priv_data_class     = &httpcontext_class,
@@ -789,6 +908,7 @@ URLProtocol ff_shttp_protocol = {
     .url_write           = http_write,
     .url_seek            = http_seek,
     .url_close           = http_close,
+    .url_getinfo 	  = http_get_info,     
     .url_get_file_handle = http_get_file_handle,
     .priv_data_size      = sizeof(HTTPContext),
     .priv_data_class     = &shttpcontext_class,

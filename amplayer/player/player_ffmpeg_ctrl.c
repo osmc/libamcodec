@@ -9,12 +9,12 @@
 #include <pthread.h>
 #include "player_priv.h"
 #include  <libavformat/avio.h>
-#include <am_itemlist.h>
+#include <itemlist.h>
 
 static struct itemlist kill_item_list;
 static char format_string[128] = {0};
 static char vpx_string[8] = {0};
-
+static int ffmpeg_load_external_module();
 int ffmpeg_lock(void **pmutex, enum AVLockOp op)
 {
     int r = 0;
@@ -64,6 +64,7 @@ int ffmpeg_interrupt_callback(unsigned long npid)
         return 0;
     }
     if (dealock_detected_cnt++ < 10000) {
+        log_info("...ffmpeg callback interrupted...\n");
         return 1;
     }
     /*player maybe locked,kill my self now*/
@@ -86,6 +87,7 @@ int ffmpeg_init(void)
     }
     basic_init++;
     av_register_all();
+    ffmpeg_load_external_module();
     av_lockmgr_register(ffmpeg_lock);
     url_set_interrupt_cb(ffmpeg_interrupt_callback);
     kill_item_list.max_items = MAX_PLAYER_THREADS;
@@ -93,6 +95,7 @@ int ffmpeg_init(void)
     kill_item_list.muti_threads_access = 1;
     kill_item_list.reject_same_item_data = 1;
     itemlist_init(&kill_item_list);
+    
     return 0;
 }
 int ffmpeg_buffering_data(play_para_t *para)
@@ -106,11 +109,40 @@ int ffmpeg_buffering_data(play_para_t *para)
         if (ret < 0) { /*iformat may buffering.,call lp buf also*/
             ret = av_buffering_data(para->pFormatCtx, 0);
         }
+	 if(ret <0 && para->playctrl_info.ignore_ffmpeg_errors){
+	 	 para->playctrl_info.ignore_ffmpeg_errors=0;
+		 if(para->pFormatCtx&& para->pFormatCtx->pb)
+		 	para->pFormatCtx->pb->error=0;
+	 	 ret=0;
+	 }
         player_mate_sleep(para);
         return ret;
     } else {
         return -1;
     }
+}
+int ffmpeg_seturl_buffered_level(play_para_t *para,int levelx10000)
+{
+    if(para&& para->pFormatCtx && para->pFormatCtx->pb)//info=buffer data level*10000,-1 is codec not init.
+        url_setcmd(para->pFormatCtx->pb,AVCMD_SET_CODEC_BUFFER_INFO,0,levelx10000);	
+    return 0;
+}
+
+int ffmepg_seturl_codec_buf_info(play_para_t *para,int type,int value){
+    if(para&& para->pFormatCtx && para->pFormatCtx->pb&&type>0&&value>=0){
+        if(type == 1){//video buffer size
+            url_setcmd(para->pFormatCtx->pb,AVCMD_SET_CODEC_BUFFER_INFO,1,value);	
+        }else if(type == 2){//audio buffer size
+            url_setcmd(para->pFormatCtx->pb,AVCMD_SET_CODEC_BUFFER_INFO,2,value);	
+        }else if(type == 3){//video data size
+            url_setcmd(para->pFormatCtx->pb,AVCMD_SET_CODEC_BUFFER_INFO,3,value);	
+        }else if(type == 4){//audio data size
+            url_setcmd(para->pFormatCtx->pb,AVCMD_SET_CODEC_BUFFER_INFO,4,value);	
+        }
+    }
+
+    return 0;
+
 }
 int ffmpeg_close_file(play_para_t *am_p)
 {
@@ -139,7 +171,9 @@ int ffmpeg_open_file(play_para_t *am_p)
 Retry_open:
         //ret = av_open_input_file(&pFCtx, am_p->file_name, NULL, byteiosize, NULL, am_p->start_param ? am_p->start_param->headers : NULL);
         ret = av_open_input_file_header(&pFCtx, am_p->file_name, NULL, byteiosize, NULL, header);
-        log_print("[ffmpeg_open_file] file=%s,header=%s\n", am_p->file_name, header);
+        if(am_getconfig_bool_def("media.amplayer.disp_url",1)>0){ 
+            log_print("[ffmpeg_open_file] file=%s,header=%s\n", am_p->file_name, header);
+        }
         if (ret != 0) {
             if (ret == AVERROR(EAGAIN)) {
                 goto  Retry_open;
@@ -158,15 +192,21 @@ Retry_open:
 int ffmpeg_parse_file_type(play_para_t *am_p, player_file_type_t *type)
 {
     AVFormatContext *pFCtx = am_p->pFormatCtx;
+	AVStream *sttmp=NULL;
     memset(type, 0, sizeof(*type));
+	memset(&am_p->media_info, 0, sizeof(media_info_t));
     if (pFCtx->iformat != NULL) {
         unsigned int i;
         int matroska_flag = 0;
         int vpx_flag = 0;
+        int flv_flag = 0;
 
         type->fmt_string = pFCtx->iformat->name;
         if (!strcmp(type->fmt_string, "matroska,webm")) {
             matroska_flag = 1;
+        }
+        if (!strcmp(type->fmt_string, "flv")) {
+            flv_flag = 1;
         }
 
         for (i = 0; i < pFCtx->nb_streams; i++) {
@@ -185,13 +225,44 @@ int ffmpeg_parse_file_type(play_para_t *am_p, player_file_type_t *type)
                 type->video_tracks++;
             } else if (st->codec->codec_type == CODEC_TYPE_AUDIO) {
                 type->audio_tracks++;
+                sttmp=st;
             } else if (st->codec->codec_type == CODEC_TYPE_SUBTITLE) {
                 type->subtitle_tracks++;
             }
         }
 
-        // special process for webm and vpx
-        if (matroska_flag || vpx_flag) {
+		 //--------special process for m4a format with alac codec----------
+		 if((type->video_tracks==0) && (type->audio_tracks==1) && (sttmp!=NULL))
+		 {    if((strstr(type->fmt_string,"m4a")!=NULL) && (sttmp->codec->codec_id==CODEC_ID_ALAC))
+		 	  {
+			      memset(format_string, 0, sizeof(format_string));
+			      //memcpy(format_string,"alac",4);
+			      sprintf(format_string, "%s","alac");
+			      log_print("NOTE: change type->fmt_string=%s to alac\n", type->fmt_string);
+			      type->fmt_string = format_string;
+		  	  }
+			  if((strstr(type->fmt_string,"aac")!=NULL) && (sttmp->codec->codec_id==CODEC_ID_AAC))
+			  {
+			  	unsigned char* buf=pFCtx->pb->buffer;
+			  	log_print("pFCtx->data_offset=%lld %c %c %c %c\n",pFCtx->data_offset,buf[0],buf[1], buf[2],buf[3]);
+				if((buf[0]=='A' && buf[1]=='D' && buf[2]=='I' && buf[3]=='F'))
+				{   
+					log_print("the stream is pure adif: set adif_ctrl_flag=1\n");
+					am_p->media_info.stream_info.adif_file_flag=1;
+				}
+			  }
+			  if((strstr(type->fmt_string,"asf")!=NULL) && pFCtx->drmcontent )
+			  {
+				log_print("drm wma detected\n");
+			       memset(format_string, 0, sizeof(format_string));
+			       sprintf(format_string, "%s","asf-drm");
+				type->fmt_string = format_string;
+   				
+			  }			  
+		 }
+	   //-----------------------------------------------------
+        // special process for webm/vpx, flv/vp6
+        if (matroska_flag || flv_flag || vpx_flag) {
             int length = 0;
 
             memset(format_string, 0, sizeof(format_string));
@@ -227,4 +298,66 @@ int ffmpeg_parse_file(play_para_t *am_p)
     return FFMPEG_SUCCESS;
 }
 
+#include "amconfigutils.h"
+int ffmpeg_load_external_module(){
+    const char *mod_path ="media.libplayer.modules";
+    const int mod_item_max = 16;
+    char value[CONFIG_VALUE_MAX];
+    int ret = -1;
+    char mod[mod_item_max][CONFIG_VALUE_MAX];
+    //memset(value,0,CONFIG_VALUE_MAX);
+
+  
+    ret = am_getconfig(mod_path, value,NULL);
+    if(ret<=1){
+        log_print("Failed to find external module,path:%s\n",mod_path);
+        return -1;
+    }
+    log_print("Get modules:[%s],mod path:%s\n",value,mod_path);
+    int pos = 0;
+    const char * psets=value;
+    const char *psetend;
+    int psetlen=0;
+    int i = 0;
+    while(psets && psets[0]!='\0'&&i<mod_item_max){
+        psetlen=0;
+        psetend=strchr(psets,',');
+        if(psetend!=NULL && psetend>psets && psetend-psets<64){
+                psetlen=psetend-psets;
+                memcpy(mod[i],psets,psetlen);
+                mod[i][psetlen]='\0';
+                psets=&psetend[1];//skip ";"
+        }else{
+                strcpy(mod[i],psets);
+                psets=NULL;
+        }
+        if(strlen(mod[i])>0){             
+             ammodule_simple_load_module(mod[i]);
+             //log_print("load module:[%s]\n",mod[i]);
+             i++;  
+        }
+        
+    }
+
+    return 0;    
+
+}
+
+int ffmpeg_geturl_netstream_info(play_para_t* para,int type,void* value){
+	int ret = -1;
+	
+	if(para&& para->pFormatCtx && para->pFormatCtx->pb){
+		if(type == 1){//measured download speed
+			ret = avio_getinfo(para->pFormatCtx->pb,AVCMD_GET_NETSTREAMINFO,1,value);
+		}else if(type == 2){//current streaming bitrate
+			ret = avio_getinfo(para->pFormatCtx->pb,AVCMD_GET_NETSTREAMINFO,2,value);
+		}else if(type == 3){ //download error code
+			ret = avio_getinfo(para->pFormatCtx->pb,AVCMD_GET_NETSTREAMINFO,3,value);
+		}
+	}
+	
+	return ret;
+	
+
+}
 

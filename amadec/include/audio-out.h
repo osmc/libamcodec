@@ -19,6 +19,7 @@ struct aml_audio_dec;
 
 typedef struct {
     void *private_data;
+    void *private_data_raw;
     int (*init)(struct aml_audio_dec *);
     int (*start)(struct aml_audio_dec *);
     int (*pause)(struct aml_audio_dec *);

@@ -25,7 +25,7 @@ static int stream_video_init(play_para_t *p_para)
         codec->has_video = 1;
         codec->video_type = vinfo->video_format;
         codec->video_pid = vinfo->video_pid;
-        if ((vinfo->video_format == VFORMAT_H264) || (vinfo->video_format == VFORMAT_H264MVC)) {
+        if ((vinfo->video_format == VFORMAT_H264) || (vinfo->video_format == VFORMAT_H264MVC) || (vinfo->video_format == VFORMAT_H264_4K2K)) {
             codec->am_sysinfo.param = (void *)(EXTERNAL_PTS | SYNC_OUTSIDE);
         }
     }

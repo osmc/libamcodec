@@ -87,6 +87,7 @@ static int file_open(URLContext *h, const char *filename, int flags)
     if (fd == -1)
         return AVERROR(errno);
     h->priv_data = (void *) (intptr_t) fd;
+    h->priv_flags|=FLAGS_LOCALMEDIA;
     return 0;
 }
 

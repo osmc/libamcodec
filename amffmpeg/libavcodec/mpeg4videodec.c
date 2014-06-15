@@ -1727,6 +1727,7 @@ static int decode_vol_header(MpegEncContext *s, GetBitContext *gb){
         if(vo_ver_id != 1)
              s->quarter_sample= get_bits1(gb);
         else s->quarter_sample=0;
+        s->avctx->quater_sample = s->quarter_sample;
 
         if(!get_bits1(gb)){
             int pos= get_bits_count(gb);

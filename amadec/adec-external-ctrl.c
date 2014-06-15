@@ -13,8 +13,10 @@
 #include <string.h>
 
 #include <audio-dec.h>
+#include "audio_out/alsactl_parser.h"
 
-
+alsactl_setting_t playback_ctl;
+alsactl_setting_t mute_ctl;
 int audio_decode_basic_init(void)
 {
 #ifndef ALSA_OUT
@@ -37,7 +39,7 @@ int audio_decode_init(void **handle, arm_audio_info *a_ainfo)
         adec_print("Existing an audio dec instance!Need not to create it !");
         return -1;
     }
-
+		
     audec = (aml_audio_dec_t *)malloc(sizeof(aml_audio_dec_t));
     if (audec == NULL) {
         adec_print("malloc failed! not enough memory !");
@@ -49,12 +51,21 @@ int audio_decode_init(void **handle, arm_audio_info *a_ainfo)
     audec->samplerate=a_ainfo->sample_rate;
     audec->format=a_ainfo->format;
     audec->adsp_ops.dsp_file_fd=a_ainfo->handle;
+    audec->adsp_ops.amstream_fd = a_ainfo->handle;
     audec->extradata_size=a_ainfo->extradata_size;
 	audec->SessionID=a_ainfo->SessionID;
 	audec->dspdec_not_supported = a_ainfo->dspdec_not_supported;
+	audec->droppcm_flag = 0;	
+	audec->bitrate=a_ainfo->bitrate;
+	audec->block_align=a_ainfo->block_align;
+	audec->codec_id=a_ainfo->codec_id;
+	if (a_ainfo->droppcm_flag) {
+		audec->droppcm_flag = a_ainfo->droppcm_flag;
+		a_ainfo->droppcm_flag = 0;
+	}
     if(a_ainfo->extradata_size>0&&a_ainfo->extradata_size<=AUDIO_EXTRA_DATA_SIZE)
         memcpy((char*)audec->extradata,(char*)a_ainfo->extradata,a_ainfo->extradata_size);
-   
+    audec->adsp_ops.audec=(void *)audec;    
 //	adec_print("audio_decode_init  pcodec = %d, pcodec->ctxCodec = %d!\n", pcodec, pcodec->ctxCodec);
     ret = audiodec_init(audec);
     if (ret) {
@@ -234,7 +245,45 @@ int audio_decode_automute(void *handle, int stat)
     audec->auto_mute = stat;
     return 0;
 }
+int dummy_decode_set_mute(int en)
+{
+   //printf("mute_ctl.ctlname=%s\n",mute_ctl.ctlname);
+    if (en &&mute_ctl.is_parsed)
+        //dummy_alsa_control("switch playback mute", 0, 1, NULL);//mute
+        dummy_alsa_control(mute_ctl.ctlname, 0, 1, NULL);//mute
+    else if(mute_ctl.is_parsed) 
+        //dummy_alsa_control("switch playback mute", 1, 1, NULL); //unmute       
+        dummy_alsa_control(mute_ctl.ctlname, 1, 1, NULL); //unmute       
+    return 0;	
+}
 
+/**
+ * \brief get audio volume
+ * \param vol volume value
+ * \return 0 on success otherwise 
+ */
+int dummy_decode_set_volume(int vol)
+{
+      //printf("playback_ctl.ctlname=%s\n",playback_ctl.ctlname);
+	if(vol < playback_ctl.minvalue)
+	    vol = playback_ctl.minvalue;
+	else if(vol > playback_ctl.maxvalue)
+	    vol = playback_ctl.maxvalue;
+	if(playback_ctl.is_parsed)
+	dummy_alsa_control(playback_ctl.ctlname , vol, 1, NULL);
+	return 0;	
+}
+int dummy_decode_get_volume(int *vol)
+{
+     // printf("playback_ctl.ctlname=%s\n",playback_ctl.ctlname);
+	if(playback_ctl.is_parsed)
+	dummy_alsa_control(playback_ctl.ctlname, 0, 0, vol );
+	if(*vol < playback_ctl.minvalue)
+	    *vol = playback_ctl.minvalue;
+	else if(*vol > playback_ctl.maxvalue)
+	    *vol = playback_ctl.maxvalue;
+	return 0;	
+}		
 /**
  * \brief mute audio output
  * \param handle pointer to player private data
@@ -590,20 +639,35 @@ int audio_get_soundtrack(void *handle, int* strack )
     return ret;    
 }
 
-int audio_set_av_delay(void *handle, int delay)
+int audio_get_pcm_level(void* handle)
 {
-    aml_audio_dec_t *audec = (aml_audio_dec_t *)handle;
-    if (!handle) {
-        adec_print("audio handle is NULL !\n");
-        return -1;
-    }
+  aml_audio_dec_t* audec = (aml_audio_dec_t*)handle;
+  if(!handle){
+    adec_print("audio handle is NULL !\n");
+    return -1;
+  }
 
-    if (delay > 500)
-        delay = 500;
-    else if (delay < -500)
-        delay = -500;
+  return audiodsp_get_pcm_level(&audec->adsp_ops);
 
-    audec->audio_delay = delay;
+}
 
-    return 0;
+int audio_set_skip_bytes(void* handle, unsigned int bytes)
+{
+  aml_audio_dec_t* audec = (aml_audio_dec_t*) handle;
+  if(!handle){
+    adec_print("audio handle is NULL !!\n");
+    return -1;
+  }
+
+  return audiodsp_set_skip_bytes(&audec->adsp_ops,bytes);
+}
+
+int audio_get_pts(void* handle)
+{
+  aml_audio_dec_t* audec = (aml_audio_dec_t*)handle;
+  if(!handle){
+    adec_print("audio handle is NULL !\n");
+    return -1;
+  }
+  return audiodsp_get_pts(&audec->adsp_ops);
 }

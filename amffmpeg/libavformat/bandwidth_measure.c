@@ -98,14 +98,17 @@ void bandwidth_measure_start_read(void *band)
 }
 int bandwidth_measure_finish_read(void *band,int bytes)
 {
-	struct ratesdata *rates=(struct ratesdata *)band;
-	if(bytes>0)
-	{
-		int64_t delay=av_gettime()-rates->last_start_read_time_us;
-		if(delay>0)
-			bandwidth_measure_add(band,bytes,delay);
-	}
-	return 0;
+    struct ratesdata *rates=(struct ratesdata *)band;
+    if(bytes<=0){
+        bytes =0;
+    }
+    if(bytes>=0)
+    {
+    	int64_t delay=av_gettime()-rates->last_start_read_time_us;
+    	if(delay>0)
+    		bandwidth_measure_add(band,bytes,delay);
+    }
+    return 0;
 }
 int bandwidth_measure_get_bandwidth(void  *band,int *fast_band,int *mid_band,int *avg_band)
 {

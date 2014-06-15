@@ -15,7 +15,6 @@
 #include "codec_type.h"
 #include "codec_error.h"
 
-
 int codec_init(codec_para_t *);
 int codec_close(codec_para_t *);
 void codec_audio_basic_init(void);
@@ -73,7 +72,6 @@ int codec_stereo(codec_para_t *p);
 int codec_get_soundtrack(codec_para_t *p,int* strack);
 int codec_audio_automute(void *priv, int auto_mute);
 int codec_audio_spectrum_switch(codec_para_t *p, int isStart, int interval);
-int codec_audio_set_delay(codec_para_t *p, int delay);
 int codec_audio_isready(codec_para_t *p);
 int codec_audio_get_nb_frames(codec_para_t *p);
 int codec_audio_set_audioinfo(codec_para_t *p);
@@ -81,16 +79,48 @@ int codec_audio_set_audioinfo(codec_para_t *p);
 int codec_get_apts(codec_para_t *pcodec);
 int codec_get_vpts(codec_para_t *pcodec);
 int codec_get_pcrscr(codec_para_t *pcodec);
+unsigned int codec_get_scrstate(codec_para_t *pcodec, unsigned long *time);
 int codec_set_pcrscr(codec_para_t *pcodec, int val);
 int codec_set_syncenable(codec_para_t *pcodec, int enable);
 int codec_set_sync_audio_discont(codec_para_t *pcodec, int discontinue);
 int codec_get_sync_audio_discont(codec_para_t *pcodec);
 int codec_set_sync_video_discont(codec_para_t *pcodec, int discontinue);
 int codec_get_sync_video_discont(codec_para_t *pcodec);
-
+unsigned long codec_get_sync_audio_discont_diff(codec_para_t *pcodec);
+unsigned long codec_get_sync_video_discont_diff(codec_para_t *pcodec);
+int codec_set_sync_audio_discont_diff(codec_para_t *pcodec, unsigned long discontinue_diff);
+int codec_set_sync_video_discont_diff(codec_para_t *pcodec, unsigned long discontinue_diff);
 int codec_get_sub_num(codec_para_t *pcodec);
 int codec_get_sub_info(codec_para_t *pcodec, subtitle_info_t *sub_info);
 
 int codec_set_av_threshold(codec_para_t *pcodec, int threshold);
 
+int codec_get_freerun_mode(codec_para_t *pcodec);
+int codec_set_freerun_mode(codec_para_t *pcodec, unsigned int mode);
+
+int codec_init_audio_utils(codec_para_t *pcodec);
+int codec_release_audio_utils(codec_para_t *pcodec);
+int codec_set_audio_resample_ena(codec_para_t *pcodec, unsigned long mode);
+int codec_get_audio_resample_ena(codec_para_t *pcodec);
+int codec_set_audio_resample_type(codec_para_t *pcodec, unsigned long type);
+
+int codec_set_video_delay_limited_ms(codec_para_t *pcodec,int delay_ms);
+int codec_get_video_delay_limited_ms(codec_para_t *pcodec,int *delay_ms);
+int codec_set_audio_delay_limited_ms(codec_para_t *pcodec,int delay_ms);
+int codec_get_audio_delay_limited_ms(codec_para_t *pcodec,int *delay_ms);
+int codec_get_audio_cur_delay_ms(codec_para_t *pcodec,int *delay_ms);
+int codec_get_video_cur_delay_ms(codec_para_t *pcodec,int *delay_ms);
+int codec_get_video_cur_bitrate(codec_para_t *pcodec,int *bitrate);
+int codec_get_audio_cur_bitrate(codec_para_t *pcodec,int *bitrate);
+
+int codec_set_vsync_upint(codec_para_t *pcodec, unsigned int mode);
+
+int codec_get_last_checkout_apts(codec_para_t* pcodec, unsigned long *apts);
+int codec_get_last_checkin_apts(codec_para_t* pcodec, unsigned long *apts);
+/*add for gstreamer fast/slow forward*/
+int codec_set_video_playrate(codec_para_t* pcodec, int rate);
+
+int dummy_codec_set_mute(int mute);
+int dummy_codec_set_volume(int vol);
+int dummy_codec_get_volume(int *vol);
 #endif

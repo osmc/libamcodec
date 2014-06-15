@@ -393,8 +393,10 @@ static inline void init_get_bits(GetBitContext *s,
 {
     int buffer_size = (bit_size+7)>>3;
     if (buffer_size < 0 || bit_size < 0) {
+        av_log(NULL,AV_LOG_INFO,"[%s] buffer_size[%d] bit_size[%d]",__FUNCTION__,buffer_size,bit_size);
         buffer_size = bit_size = 0;
         buffer = NULL;
+        return;
     }
 
     s->buffer       = buffer;

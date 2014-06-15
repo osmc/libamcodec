@@ -238,6 +238,7 @@ enum CodecID {
     CODEC_ID_PCM_BLURAY,
     CODEC_ID_PCM_LXF,
     CODEC_ID_S302M,
+    CODEC_ID_PCM_WIFIDISPLAY,
 
     /* various ADPCM codecs */
     CODEC_ID_ADPCM_IMA_QT= 0x11000,
@@ -1138,10 +1139,12 @@ typedef struct AVPacket {
      */
     int64_t convergence_duration;
 } AVPacket;
-#define AV_PKT_FLAG_KEY   0x0001
+#define AV_PKT_FLAG_KEY     0x0001 ///< The packet contains a keyframe
+#define AV_PKT_FLAG_CORRUPT 0x0002 ///< The packet content is corrupted
 
 
 #define AV_PKT_FLAG_AAC_WITH_ADTS_HEADER   0x010000
+#define AV_PKT_FLAG_ISDECRYPTINFO  0x0100 ///< The packet is drminfo not real es
 
 
 /**
@@ -2920,6 +2923,7 @@ typedef struct AVCodecContext {
     /* added by Z.C
      * to record mpeg4 vol_sprite_usage */
      int mpeg4_vol_sprite;
+     int quater_sample;
 
     /* added by Z.C
      * to record vc1_profile */
@@ -2932,6 +2936,8 @@ typedef struct AVCodecContext {
     /* added by Z.C
      * for some special ps files */
      int mpegps_video_idprobed;
+	/*for some special asf files */
+	 int durcount;
 } AVCodecContext;
 
 /**

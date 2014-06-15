@@ -2,7 +2,6 @@
 #include <stdio.h>
 #include "version.h"
 #include <string.h>
-#include <stdint.h>
 
 
 static char versioninfo[256] = "N/A";
@@ -60,7 +59,7 @@ const char *player_get_version_info(void)
     player_version_info_init();
     return versioninfo;
 }
-int64_t player_get_version_serail(void)
+long long player_get_version_serail(void)
 {
     player_version_info_init();
     return version_serial;

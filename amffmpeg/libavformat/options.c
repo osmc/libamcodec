@@ -67,7 +67,7 @@ static const AVOption *opt_find(void *obj, const char *name, const char *unit, i
 #define D AV_OPT_FLAG_DECODING_PARAM
 
 static const AVOption options[]={
-{"probesize", "set probing size", OFFSET(probesize), FF_OPT_TYPE_INT, {.dbl = 5000000 }, 32, INT_MAX, D},
+{"probesize", "set probing size", OFFSET(probesize), FF_OPT_TYPE_INT, {.dbl = 6500000 }, 32, INT_MAX, D},
 {"muxrate", "set mux rate", OFFSET(mux_rate), FF_OPT_TYPE_INT, {.dbl = DEFAULT }, 0, INT_MAX, E},
 {"packetsize", "set packet size", OFFSET(packet_size), FF_OPT_TYPE_INT, {.dbl = DEFAULT }, 0, INT_MAX, E},
 {"fflags", NULL, OFFSET(flags), FF_OPT_TYPE_FLAGS, {.dbl = DEFAULT }, INT_MIN, INT_MAX, D|E, "fflags"},

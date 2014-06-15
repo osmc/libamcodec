@@ -107,7 +107,7 @@ static int sap_write_header(AVFormatContext *s)
         struct addrinfo hints, *ai = NULL;
         memset(&hints, 0, sizeof(hints));
 	 hints.ai_family = AF_UNSPEC;	
-	 if(am_getconfig_bool("media.libplayer.ipv4only"))		
+	 if(am_getconfig_bool_def("media.libplayer.ipv4only",1))		
         	hints.ai_family = AF_INET;
         if (getaddrinfo(host, NULL, &hints, &ai)) {
             av_log(s, AV_LOG_ERROR, "Unable to resolve %s\n", host);

@@ -47,7 +47,8 @@ int dts_transenc_init()
 	    goto err2;
 	}
 	rv = pcmenc_get_pcm_info(&dts_transenc_info);//xujian
-    
+    	if(dts_transenc_info.LFEFlag > 1)
+		dts_transenc_info.LFEFlag = 1;
 	int fd_dtsenc = dlopen("libdtsenc.so",RTLD_NOW);
 	if (fd_dtsenc != 0)
 	{

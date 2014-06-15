@@ -463,7 +463,7 @@ void ff_update_duplicate_context(MpegEncContext *dst, MpegEncContext *src){
 int ff_mpeg_update_thread_context(AVCodecContext *dst, const AVCodecContext *src)
 {
     MpegEncContext *s = dst->priv_data, *s1 = src->priv_data;
-
+    int err;
     if(dst == src || !s1->context_initialized) return 0;
 
     //FIXME can parameters change on I-frames? in that case dst may need a reinit
@@ -476,7 +476,11 @@ int ff_mpeg_update_thread_context(AVCodecContext *dst, const AVCodecContext *src
         s->bitstream_buffer      = NULL;
         s->bitstream_buffer_size = s->allocated_bitstream_buffer_size = 0;
 
-        MPV_common_init(s);
+		if((err = MPV_common_init(s)) < 0){
+			memset(s, 0, sizeof(MpegEncContext));
+			s->avctx = dst;
+			return err;
+		}
     }
 
     s->avctx->coded_height  = s1->avctx->coded_height;

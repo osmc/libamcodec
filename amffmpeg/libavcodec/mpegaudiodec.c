@@ -41,6 +41,7 @@
 #define BACKSTEP_SIZE 512
 #define EXTRABYTES 24
 
+#define SKIP_BYTE_SIZE (BACKSTEP_SIZE*8) //Lujian.hu 1012-11-13 in order to avoid a negative skip and access a non-readable address
 /* layer 3 "granule" */
 typedef struct GranuleDef {
     uint8_t scfsi;
@@ -63,7 +64,7 @@ typedef struct GranuleDef {
 
 typedef struct MPADecodeContext {
     MPA_DECODE_HEADER
-    uint8_t last_buf[2*BACKSTEP_SIZE + EXTRABYTES];
+    uint8_t last_buf[SKIP_BYTE_SIZE+2*BACKSTEP_SIZE + EXTRABYTES];
     int last_buf_size;
     /* next header (used in free format parsing) */
     uint32_t free_format_next_header;
@@ -1545,9 +1546,9 @@ static int mp_decode_layer3(MPADecodeContext *s)
     av_dlog(s->avctx, "seekback: %d\n", main_data_begin);
 //av_log(NULL, AV_LOG_ERROR, "backstep:%d, lastbuf:%d\n", main_data_begin, s->last_buf_size);
 
-    memcpy(s->last_buf + s->last_buf_size, ptr, EXTRABYTES);
+    memcpy(s->last_buf + SKIP_BYTE_SIZE + s->last_buf_size, ptr, EXTRABYTES);
     s->in_gb= s->gb;
-        init_get_bits(&s->gb, s->last_buf, s->last_buf_size*8);
+        init_get_bits(&s->gb, s->last_buf+SKIP_BYTE_SIZE, s->last_buf_size*8);
         skip_bits_long(&s->gb, 8*(s->last_buf_size - main_data_begin));
   }
 
@@ -1728,7 +1729,7 @@ static int mp_decode_frame(MPADecodeContext *s,
             align_get_bits(&s->gb);
             i= get_bits_left(&s->gb)>>3;
             if(i >= 0 && i <= BACKSTEP_SIZE){
-                memmove(s->last_buf, s->gb.buffer + (get_bits_count(&s->gb)>>3), i);
+                memmove(s->last_buf + SKIP_BYTE_SIZE, s->gb.buffer + (get_bits_count(&s->gb)>>3), i);
                 s->last_buf_size=i;
             }else
                 av_log(s->avctx, AV_LOG_ERROR, "invalid old backstep %d\n", i);
@@ -1746,7 +1747,7 @@ static int mp_decode_frame(MPADecodeContext *s,
             i= FFMIN(BACKSTEP_SIZE, buf_size - HEADER_SIZE);
         }
         assert(i <= buf_size - HEADER_SIZE && i>= 0);
-        memcpy(s->last_buf + s->last_buf_size, s->gb.buffer + buf_size - HEADER_SIZE - i, i);
+        memcpy(s->last_buf + SKIP_BYTE_SIZE + s->last_buf_size, s->gb.buffer + buf_size - HEADER_SIZE - i, i);
         s->last_buf_size += i;
 
         break;

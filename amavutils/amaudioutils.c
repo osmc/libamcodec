@@ -7,7 +7,7 @@
 #include <cutils/log.h>
 #include <sys/ioctl.h>
 
-#include "include/amutils_common.h"
+#include <Amsysfsutils.h>
 #include "include/amaudioutils.h"
 
 typedef enum
@@ -37,10 +37,10 @@ static int set_audiodsp_frelevel(int m1_flag, int coeff)
 {
 	int val;
 	if(m1_flag)	{		
-		val = get_sysfs_int(AUDIODSP_CODEC_MIPS_IN);
+		val = amsysfs_get_sysfs_int16(AUDIODSP_CODEC_MIPS_IN);
 		if(val > 0 && coeff > 0){
 			val = coeff * val;
-			set_sys_int(AUDIODSP_CODEC_MIPS_OUT,val);
+			amsysfs_set_sysfs_int(AUDIODSP_CODEC_MIPS_OUT,val);
 			LOGI("m1:set_cpu_freq_scaling_based_auido %d\n",val);
 		}else{
 			LOGI("m1:set_cpu_freq_scaling_based_auido failed\n");
@@ -49,7 +49,7 @@ static int set_audiodsp_frelevel(int m1_flag, int coeff)
 	}
 	else
 	{
-		set_sys_int(AUDIODSP_CLK81_FRQ_LEVEL, coeff);
+		amsysfs_set_sysfs_int(AUDIODSP_CLK81_FRQ_LEVEL, coeff);
 	}
 	return 0;
 }

@@ -35,8 +35,9 @@
 typedef enum _AdaptationProfile{
     CONSTANT_ADAPTIVE = 0, //just  does not switch variant. 
     AGREESSIVE_ADAPTIVE, //only the last throughput measurement
-    CONSERVATIVE_ADAPTIVE,//the last throughput measurement with by a sensitivity parameter(eg.0.8)
     MEAN_ADAPTIVE,//the last throughput measurement and buffer fullness    
+    CONSERVATIVE_ADAPTIVE,//the last throughput measurement with by a sensitivity parameter(eg.0.8)
+    MANUAL_ADAPTIVE,
 }AdaptationProfile;
 
 
@@ -78,11 +79,11 @@ struct AES128KeyContext{
 typedef struct list_item
 {
     const char *file;
+    int64_t item_size;
     int 	   flags;
     int         have_list_end;
     double  	start_time;
     double		duration;
-    int64_t file_size;
     int 	bandwidth;
     int 	seq;
     int    index;
@@ -95,6 +96,7 @@ typedef struct list_item
 struct variant{
     char url[MAX_URL_SIZE];
     int bandwidth;
+    int priority; 
 };
 
 typedef struct list_mgt
@@ -110,6 +112,7 @@ typedef struct list_mgt
     int next_index;
     struct list_item *current_item;
     int playing_item_index;
+    int cmf_item_index;
     int playing_item_seq;
     int strategy_up_counts;
     int strategy_down_counts;
@@ -123,7 +126,7 @@ typedef struct list_mgt
     //added for Playlist file with encrypted media segments	
     int n_variants;
     struct variant ** variants;	
-    int is_variant;
+    int is_variant;    
     int has_iv;
     int bandwidth;
     char* prefix; //	
@@ -135,6 +138,17 @@ typedef struct list_mgt
     void *cache_http_handle;
     char *ipad_ex_headers; 
     char *ipad_req_media_headers;
+    int codec_buf_level;//10000*data/size;-1,not inited.
+    int switch_up_num;
+    int switch_down_num;
+    int debug_level;
+    int codec_vbuf_size;
+    int codec_abuf_size;	
+    int codec_vdat_size;
+    int codec_adat_size;	 	
+    int parser_finish_flag;
+    int measure_bw;
+    int read_eof_flag;	
 }list_mgt_t;
 
 typedef struct list_demux

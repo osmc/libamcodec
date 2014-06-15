@@ -86,6 +86,52 @@ int codec_get_mutesta(codec_para_t *p)
 
 /* --------------------------------------------------------------------------*/
 /**
+* @brief  linux codec_set_mute  Set audio mute
+* @param[in]  mute  mute command, 1 for mute, 0 for unmute
+*
+* @return     audio command result
+*/
+/* --------------------------------------------------------------------------*/
+int dummy_codec_set_mute(int mute)
+{
+    int ret;
+    CODEC_PRINT("dumyy codec set mute =%d\n",mute);
+    /* 1: mut output. 0: unmute output */
+    ret = dummy_decode_set_mute(mute);
+    
+    return ret;
+}
+
+/* --------------------------------------------------------------------------*/
+/**
+* @brief  codec_set_volume  Set audio volume
+
+* @param[in]  val  Volume to be set
+*
+* @return     command result
+*/
+/* --------------------------------------------------------------------------*/
+int dummy_codec_set_volume(int val)
+{
+    int ret;
+    ret = dummy_decode_set_volume(val);
+    return ret;
+}
+
+/* --------------------------------------------------------------------------*/
+/**
+* @brief  codec_get_volume  Get audio volume*
+* @return     command result
+*/
+/* --------------------------------------------------------------------------*/
+int dummy_codec_get_volume(int *val)
+{
+    int ret;
+    ret = dummy_decode_get_volume(val);
+    return ret;
+}	
+/* --------------------------------------------------------------------------*/
+/**
 * @brief  codec_set_mute  Set audio mute
 *
 * @param[in]  p     Pointer of codec parameter structure
@@ -132,9 +178,9 @@ int codec_get_volume_range(codec_para_t *p, int *min, int *max)
 /* --------------------------------------------------------------------------*/
 int codec_set_volume(codec_para_t *p, float val)
 {
-    int ret = -1;
-    if (p)
-        ret = audio_decode_set_volume(p->adec_priv, val);
+    int ret;
+
+    ret = audio_decode_set_volume(p->adec_priv, val);
     return ret;
 }
 
@@ -149,9 +195,8 @@ int codec_set_volume(codec_para_t *p, float val)
 /* --------------------------------------------------------------------------*/
 int codec_get_volume(codec_para_t *p, float *val)
 {
-    int ret = -1;
-    if (p)
-        ret = audio_decode_get_volume(p->adec_priv, val);
+    int ret;
+    ret = audio_decode_get_volume(p->adec_priv, val);
     return ret;
 }
 
@@ -168,9 +213,9 @@ int codec_get_volume(codec_para_t *p, float *val)
 /* --------------------------------------------------------------------------*/
 int codec_set_lrvolume(codec_para_t *p, float lvol,float rvol)
 {
-    int ret = -1;
-    if (p)
-        ret = audio_decode_set_lrvolume(p->adec_priv, lvol,rvol);
+    int ret;
+
+    ret = audio_decode_set_lrvolume(p->adec_priv, lvol,rvol);
     return ret;
 }
 
@@ -185,9 +230,8 @@ int codec_set_lrvolume(codec_para_t *p, float lvol,float rvol)
 /* --------------------------------------------------------------------------*/
 int codec_get_lrvolume(codec_para_t *p, float *lvol,float* rvol)
 {
-    int ret = -1;
-    if (p)
-        ret = audio_decode_get_lrvolume(p->adec_priv, lvol,rvol);
+    int ret;
+    ret = audio_decode_get_lrvolume(p->adec_priv, lvol,rvol);
     return ret;
 }
 
@@ -314,25 +358,6 @@ int codec_audio_spectrum_switch(codec_para_t *p, int isStart, int interval)
 
     return ret;
 }
-
-/* --------------------------------------------------------------------------*/
-/**
-* @brief  codec_audio_set_delay   set the amount of audio delay
-*
-* @param[in]  p         Pointer of codec parameter structure
-* @param[in]  delay     audio delay in ms (-500ms to 500ms)
-*
-* @return     Command result
-*/
-/* --------------------------------------------------------------------------*/
-int codec_audio_set_delay(codec_para_t *p, int delay)
-{
-    int ret = -1;
-    if (p)
-        ret = audio_set_av_delay(p->adec_priv, delay);
-    return ret;
-}
-
 int codec_get_soundtrack(codec_para_t *p,int* strack)
 {
     return audio_get_soundtrack(p->adec_priv, strack);

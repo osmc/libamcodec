@@ -27,6 +27,11 @@
 #include "pcm.h"
 #include "riff.h"
 #include "metadata.h"
+#include "libavcodec/bytestream.h"
+#define DCA_MARKER_14B_BE 0x1FFFE800
+#define DCA_MARKER_14B_LE 0xFF1F00E8
+#define DCA_MARKER_RAW_BE 0x7FFE8001
+#define DCA_MARKER_RAW_LE 0xFE7F0180
 
 typedef struct {
     int64_t data;
@@ -164,20 +169,69 @@ static int64_t find_tag(AVIOContext *pb, uint32_t tag1)
     }
     return size;
 }
+static int dts_in_wav_probe(AVProbeData *p)
+{
+    const uint8_t *buf, *bufp;
+    uint32_t state = -1;
+    int markers[3] = {0};
+    int sum, max;
+    av_log(NULL,AV_LOG_INFO,"dts_in_wav_probe in,buf size %d\n",p->buf_size);
+    buf = p->buf;
+    for(; buf < (p->buf+p->buf_size)-2; buf+=2) {
+        bufp = buf;
+        state = (state << 16) | bytestream_get_be16(&bufp);
 
+        /* regular bitstream */
+        if (state == DCA_MARKER_RAW_BE || state == DCA_MARKER_RAW_LE)
+            markers[0]++;
+
+        /* 14 bits big-endian bitstream */
+        if (state == DCA_MARKER_14B_BE)
+            if ((bytestream_get_be16(&bufp) & 0xFFF0) == 0x07F0)
+                markers[1]++;
+
+        /* 14 bits little-endian bitstream */
+        if (state == DCA_MARKER_14B_LE)
+            if ((bytestream_get_be16(&bufp) & 0xF0FF) == 0xF007)
+                markers[2]++;
+    }
+    sum = markers[0] + markers[1] + markers[2];
+    max = markers[1] > markers[0];
+    max = markers[2] > markers[max] ? 2 : max;
+	/*wav file probe,may does not have much dts frames,so only check 1 frame.as maybe one frame in 2048 bytes probed  */
+    if (markers[max]>= 1){
+        return AVPROBE_SCORE_MAX/4;
+    }		
+    else if (markers[max] > 3 && p->buf_size / markers[max] < 32*1024 &&
+        markers[max] * 4 > sum * 3){        
+        return AVPROBE_SCORE_MAX/2+1;
+    }
+    return 0;	
+ 
+}
 static int wav_probe(AVProbeData *p)
 {
     /* check file header */
     if (p->buf_size <= 32)
         return 0;
+    unsigned dts_score = 0;	
     if (!memcmp(p->buf + 8, "WAVE", 4)) {
-        if (!memcmp(p->buf, "RIFF", 4))
+        if (!memcmp(p->buf, "RIFF", 4)){
             /*
               Since ACT demuxer has standard WAV header at top of it's own,
               returning score is decreased to avoid probe conflict
               between ACT and WAV.
             */
+            /* probe dts in wav at least 4k size */            
+            if(p->buf_size < 4096)
+	     		return 0;
+  	     dts_score = dts_in_wav_probe(p);	
+	     if(dts_score >= AVPROBE_SCORE_MAX/4){
+		 	av_log(NULL,AV_LOG_INFO,"DTS in wav may found, check more data to verify \n");
+			return AVPROBE_SCORE_MAX/4;
+	     }
             return AVPROBE_SCORE_MAX - 1;
+        }		
         else if (!memcmp(p->buf,      "RF64", 4) &&
                  !memcmp(p->buf + 12, "ds64", 4))
             return AVPROBE_SCORE_MAX;

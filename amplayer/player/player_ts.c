@@ -29,7 +29,7 @@ static int stream_ts_init(play_para_t *p_para)
         codec->has_video = 1;
         codec->video_type = vinfo->video_format;
         codec->video_pid = vinfo->video_pid;
-        if ((codec->video_type == VFORMAT_H264) || (codec->video_type == VFORMAT_H264MVC)) {
+        if ((codec->video_type == VFORMAT_H264) || (codec->video_type == VFORMAT_H264MVC) || (codec->video_type == VFORMAT_H264_4K2K)) {
             codec->am_sysinfo.format = vinfo->video_codec_type;
             codec->am_sysinfo.width = vinfo->video_width;
             codec->am_sysinfo.height = vinfo->video_height;
@@ -38,6 +38,15 @@ static int stream_ts_init(play_para_t *p_para)
                 /* ts slow media, use idr framerate */
                 log_print("[%s:%d]Slow media detected for ts\n", __FUNCTION__, __LINE__);
                 codec->am_sysinfo.param = USE_IDR_FRAMERATE;
+            }
+            if ((codec->video_type == VFORMAT_H264) && p_para->playctrl_info.iponly_flag) {
+                codec->am_sysinfo.param = (void *)(IPONLY_MODE | (int) codec->am_sysinfo.param);
+            }
+            if ((codec->video_type == VFORMAT_H264) && p_para->playctrl_info.no_dec_ref_buf) {
+                codec->am_sysinfo.param = (void *)(NO_DEC_REF_BUF | (int) codec->am_sysinfo.param);
+            }
+            if ((vinfo->video_format == VFORMAT_H264) && p_para->playctrl_info.no_error_recovery) {
+                codec->am_sysinfo.param = (void *)(NO_ERROR_RECOVERY | (int)codec->am_sysinfo.param);
             }
         } else if (codec->video_type == VFORMAT_VC1 || codec->video_type == VFORMAT_AVS) {
             codec->am_sysinfo.format = vinfo->video_codec_type;
@@ -52,6 +61,7 @@ static int stream_ts_init(play_para_t *p_para)
         codec->audio_pid = ainfo->audio_pid;
         codec->audio_channels = ainfo->audio_channel;
         codec->audio_samplerate = ainfo->audio_samplerate;
+		codec->switch_audio_flag = 0;
         pCodecCtx = p_para->pFormatCtx->streams[p_para->astream_info.audio_index]->codec;
         /*if ((codec->audio_type == AFORMAT_ADPCM) || (codec->audio_type == AFORMAT_WMA)
             || (codec->audio_type == AFORMAT_WMAPRO) || (codec->audio_type == AFORMAT_PCM_S16BE)
@@ -74,6 +84,10 @@ static int stream_ts_init(play_para_t *p_para)
             codec->audio_info.valid = 1;
 
         }
+		if(IS_AUDIO_NOT_SUPPORTED_BY_AUDIODSP(codec->audio_type,pCodecCtx)){
+				codec->dspdec_not_supported = 1;
+				log_print("main profile aac not supported by dsp decoder,so set dspdec_not_supported flag\n");
+		}	
         codec->avsync_threshold = p_para->start_param->avsync_threshold;
         log_print("[%s:%d]audio bitrate=%d sample_rate=%d channels=%d codec_id=%x block_align=%d,extra size\n",
                   __FUNCTION__, __LINE__, codec->audio_info.bitrate, codec->audio_info.sample_rate, codec->audio_info.channels,
@@ -94,8 +108,20 @@ static int stream_ts_init(play_para_t *p_para)
         }
         goto error1;
     }
+    
+    if(am_getconfig_bool("media.libplayer.wfd")) {
+        ret = codec_init_audio_utils(codec);
+        if (ret != CODEC_ERROR_NONE) {
+            codec_close(codec);
+            goto error1;
+        }
+    }    
 
     p_para->codec = codec;
+    if (vinfo->has_video) {
+        codec_set_freerun_mode(codec,p_para->playctrl_info.freerun_mode);
+        codec_set_vsync_upint(codec, p_para->playctrl_info.vsync_upint);
+    }
     return PLAYER_SUCCESS;
 error1:
     log_print("[ts]codec_init failed!\n");
@@ -105,6 +131,12 @@ error1:
 static int stream_ts_release(play_para_t *p_para)
 {
     if (p_para->codec) {
+        if (p_para->codec->audio_utils_handle >= 0) {
+            codec_set_audio_resample_type(p_para->codec, 0);
+            codec_set_audio_resample_ena(p_para->codec, 0); 
+            codec_release_audio_utils(p_para->codec);
+        }
+
         codec_close(p_para->codec);
         codec_free(p_para->codec);
     }

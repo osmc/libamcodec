@@ -95,6 +95,13 @@ int am_getconfig(const char * path, char *val, const char * def)
 		if(ret>0)
 			i=1;
 	}
+#else
+	//if(i<0){
+		/*get failed,get from android prop settings*/
+	// 	val=getenv(path);	
+	//	if(val!=NULL)
+		//	i=1;
+	//}
 #endif
     return strlen(val) ;
 }
@@ -115,7 +122,8 @@ int am_setconfig(const char * path, const char *val)
     }
     if (val != NULL) {
         setval = strdup(val);
-        setval[CONFIG_VALUE_MAX] = '\0'; /*maybe val is too long,cut it*/
+        if(strlen(setval) >= CONFIG_VALUE_MAX)
+            setval[CONFIG_VALUE_MAX] = '\0'; /*maybe val is too long,cut it*/
     }
     lp_lock(&config_lock);
     i = get_matched_index(path);
@@ -150,7 +158,8 @@ int am_setconfig(const char * path, const char *val)
     strcpy(pconfig + CONFIG_VALUE_OFF, setval);
     ret = 0;
 end_out:
-    free(setval);
+    if(setval!=NULL)
+    	free(setval);
     lp_unlock(&config_lock);
     return ret;
 }
@@ -190,6 +199,20 @@ int am_getconfig_float(const char * path, float *value)
     return ret > 0 ? 0 : -2;
 }
 
+float am_getconfig_float_def(const char * path,float defvalue)
+{
+    char buf[CONFIG_VALUE_MAX];
+    int ret = -1;
+    float value;
+    ret = am_getconfig(path, buf,NULL);
+    if (ret > 0) {
+        ret = sscanf(buf, "%f", &value);
+    }
+    if(ret<=0)
+        value=defvalue;
+    return value;
+}
+
 int am_getconfig_bool(const char * path)
 {
     char buf[CONFIG_VALUE_MAX];
@@ -202,3 +225,28 @@ int am_getconfig_bool(const char * path)
     }
     return 0;
 }
+
+int am_getconfig_bool_def(const char * path,int def)
+{
+    char buf[CONFIG_VALUE_MAX];
+    int ret = -1;
+
+    ret = am_getconfig(path, buf,NULL);
+    if (ret > 0) {
+        if(strcasecmp(buf,"true")==0 || strcmp(buf,"1")==0)
+            return 1;
+        else
+            return 0;
+    }
+    return def;
+}
+
+
+#ifndef ADROID
+int property_get(const char *key, char *value, const char *default_value)
+{
+    printf("player system property_get [%s] %s\n", __FILE__, __FUNCTION__);
+    return am_getconfig(key, value, default_value);
+}
+#endif  
+

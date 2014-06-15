@@ -3,7 +3,7 @@
 
 #include <libavformat/avformat.h>
 #include <stream_format.h>
-
+#define ASTREAM_MAX_NUM 20
 struct play_para;
 
 //#define DEBUG_VARIABLE_DUR
@@ -39,7 +39,6 @@ typedef struct {
     unsigned int    video_rotation_degree;
     unsigned int    video_codec_rate;
     vdec_type_t     video_codec_type;
-    int             vdec_buf_len;
     int             extradata_size;
     uint8_t             *extradata;
 } v_stream_info_t;
@@ -49,12 +48,12 @@ typedef struct {
     int             resume_audio;
     aformat_t       audio_format;
     signed short    audio_index;
+    signed short    audio_index_tab[ASTREAM_MAX_NUM]; // some audio stream is unvalid, convert the stream.index to display num.
     unsigned short  audio_pid;
     int             audio_channel;
     int             audio_samplerate;
     int             check_first_pts;
     int64_t         start_time;
-    int             adec_buf_len;
     float           audio_duration;
     int             extradata_size;
     uint8_t         *extradata;
@@ -71,6 +70,8 @@ typedef struct {
     int             check_first_pts;
     int             cur_subindex; //for change subtitle
     int             sub_has_found;
+    int             sub_stream;
+    char            *sub_buf[9];
 } s_stream_info_t;
 
 typedef  struct {
@@ -106,7 +107,9 @@ typedef  struct {
     unsigned int switch_audio_id;
     unsigned int switch_sub_id;
     unsigned int is_playlist;	
-    unsigned int lowbuffermode_flag;	
+    unsigned int lowbuffermode_flag;
+    unsigned int ignore_ffmpeg_errors;
+    unsigned int temp_interrupt_ffmpeg;	
     float time_point;
     int f_step;
     int read_max_retry_cnt;
@@ -119,6 +122,18 @@ typedef  struct {
 	int seek_frame_fail;
     long avsync_check_old_time;
     long vbuf_rpchanged_Old_time;
+    long avdiff_check_old_time;
+    int avdiff_next_reset_timepoint;
+    int pts_discontinue_check_time;
+
+	int buf_limited_time_ms;/*low buffering mode,if data> ms,we do wait write.*/
+	int reset_drop_buffered_data;/*droped buffered data.*/
+
+    int iponly_flag;
+    int freerun_mode;
+    int no_dec_ref_buf;
+    int vsync_upint;
+    int no_error_recovery;
 } p_ctrl_info_t;
 
 int player_dec_init(struct play_para *p_para);

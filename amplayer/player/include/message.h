@@ -41,6 +41,7 @@ typedef enum {
     CMD_SET_STEREO      = (1 << 14),   
     CMD_EN_AUTOBUF      = (1 << 15),
     CMD_SET_AUTOBUF_LEV = (1 << 16),
+    CMD_SET_FREERUN_MODE = (1 << 17),
     CMD_MODE_MAX        = (1 << 31),
 } ctrl_mode_t;
 

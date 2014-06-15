@@ -2,25 +2,15 @@ M_PREFIX=$(PREFIX)
 
 TARGET=libamadec.so
 
-TARGET_OBJS  = adec-external-ctrl.o
-TARGET_OBJS += adec-internal-mgt.o
-TARGET_OBJS += adec-ffmpeg-mgt.c
-TARGET_OBJS += adec-message.o
-TARGET_OBJS += adec-pts-mgt.o
-TARGET_OBJS += feeder.o
-TARGET_OBJS += adec_write.c
-TARGET_OBJS += adec_read.c
-TARGET_OBJS += dsp/audiodsp-ctl.o
-TARGET_OBJS += audio_out/alsa-out.o
-TARGET_OBJS += audio_out/aml_resample.c
-TARGET_OBJS += audiodsp_update_format.c
+TARGET_OBJS=adec-external-ctrl.o adec-internal-mgt.o adec-ffmpeg-mgt.o adec-message.o adec-pts-mgt.o feeder.o adec_write.o adec_read.o\
+           dsp/audiodsp-ctl.o audio_out/alsa-out.o audio_out/aml_resample.o audiodsp_update_format.o spdif_api.o pcmenc_api.o dts_transenc_api.o dts_enc.o audio_out/alsactl_parser.o 
 
 INSTALL_DIR=${M_PREFIX}/lib
 
 LDFLAGS += -shared -lpthread -lm -lasound -lrt -ldl
 
 CFLAGS+=-O2
-CFLAGS+=-I$(shell pwd) -I$(shell pwd)/include -I${PREFIX}/include -I${PREFIX}/usr/include -L${PREFIX}/lib -L${PREFIX}/usr/lib
+CFLAGS+=-I$(shell pwd) -I$(shell pwd)/include -I$(shell pwd)/../amavutils/include -I${PREFIX}/include -I${PREFIX}/usr/include -L${PREFIX}/lib -L${PREFIX}/usr/lib
 CFLAGS+=-DALSA_OUT -DENABLE_WAIT_FORMAT
 
 export CC CFLAGS

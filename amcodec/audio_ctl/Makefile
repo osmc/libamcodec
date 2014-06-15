@@ -1,2 +1,2 @@
 
-obj-y += audio_ctrl.o 
+obj-y += audio_ctrl.o

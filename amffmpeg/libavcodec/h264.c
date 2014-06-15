@@ -152,6 +152,13 @@ const uint8_t *ff_h264_decode_nal(H264Context *h, const uint8_t *src, int *dst_l
     h->nal_ref_idc= src[0]>>5;
     h->nal_unit_type= src[0]&0x1F;
 
+	// for the Bug 75408
+	if((h->nal_unit_type == NAL_14) && (src[2] == 0) && (src[3] == 0) && (src[4] == 0) && (src[5] == 0))
+	{
+		h->nal_unit_type = NAL_SLICE;
+		av_log(NULL, AV_LOG_ERROR, "force reset nal type to NAL_SLICE when nal unit header is NULL and type is 14\n");
+	}
+
     src++; length--;
 
 #if HAVE_FAST_UNALIGNED

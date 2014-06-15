@@ -33,8 +33,8 @@
 #include "aviolpbuf.h"
 #include "amconfigutils.h"
 /*
-Pos
-buffer    rp                         wp                   buffer_end
+										Pos		
+buffer    rp                         wp                   buffer_end 
 |           |                           |                           |
 ================================
 |                                                                     |
@@ -60,6 +60,7 @@ Can seek back size:
 //#define LP_RD_DEBUG
 
 #define lp_print(level,fmt...) av_log(NULL,level,##fmt)
+
 #ifdef LP_SK_DEBUG
 #define lp_sprint(level,fmt...) av_log(NULL,level,##fmt)
 #else
@@ -117,8 +118,7 @@ int url_lpopen(URLContext *s,int size)
 		if(ret>=0 && value>=1024){
 			failedsize=(int)value;
 		}
-		lp_sprint( AV_LOG_INFO,"malloc buf failed,used failed size=%d\n",failedsize);
-
+		lp_sprint( AV_LOG_INFO,"malloc buf failed,used failed size=%d\n",failedsize);
 		lp->buffer=av_malloc(failedsize);	
 		while(!lp->buffer){
 			failedsize=failedsize/2;
@@ -144,7 +144,7 @@ int url_lpopen(URLContext *s,int size)
 	lp_lock_init(&lp->mutex,NULL);
 	lp->file_size=url_lpseek(s,0,AVSEEK_SIZE);
 	lp->cache_enable=0;
-	lp->cache_id=aviolp_cache_open(s->filename,url_filesize(s));
+	lp->cache_id=aviolp_cache_open(s->filename,url_lpseek(s,0,AVSEEK_SIZE));
 	lp->dbg_cnt=0;
 	ret=am_getconfig_float("libplayer.ffmpeg.lpbufmaxbuflv",&value);
 		if(ret<0)
@@ -168,6 +168,7 @@ int url_lpopen(URLContext *s,int size)
 	return 0;
 }
 
+#if 0
 int url_lpopen_ex(URLContext *s,
 			int size,
 			int flags,
@@ -190,6 +191,36 @@ int url_lpopen_ex(URLContext *s,
 		uc->prot->flags=uc->flags ;
 	}else{
 	}
+	return ret;
+}
+#endif
+
+int url_lpopen_ex(URLContext *s,
+			int size,
+			int flags,
+	 	    	int (*read_packet)(void *opaque, uint8_t *buf, int buf_size),
+                  	int64_t (*seek)(void *opaque, int64_t offset, int whence))
+{
+       int ret;    
+	URLContext   *uc=s;
+       if (!uc->prot){
+            av_log(NULL,AV_LOG_INFO,"url_lpopen_ex failed\n");
+            return -1;
+      }
+	uc->av_class = NULL;
+	uc->filename = (char *)NULL;
+	uc->flags = flags;
+	uc->is_streamed = 0; 	      /* default = not streamed */
+	uc->max_packet_size = 0;  /* default: stream file */
+	uc->prot->url_read=read_packet;
+	uc->prot->url_seek=seek;
+	uc->prot->url_exseek=seek;
+	uc->prot->flags=uc->flags ;    
+	ret=url_lpopen(uc,size);
+      if (ret < 0){
+            av_log(NULL,AV_LOG_INFO," url_lpopen -failed\n");
+            return -1;
+      } 
 	return ret;
 }
 
@@ -347,7 +378,7 @@ int64_t url_lpseek(URLContext *s, int64_t offset, int whence)
 			return -1;
 		}
 		size = s->prot->url_seek(s, 0, AVSEEK_SIZE);
-		if(size<0){
+		if(size<0&& size!=AVERROR_STREAM_SIZE_NOTVALID){
 			if ((size = s->prot->url_seek(s, -1, SEEK_END)) < 0)
 			{
 				lp_unlock(&lp->mutex);
@@ -421,9 +452,9 @@ int64_t url_lpseek(URLContext *s, int64_t offset, int whence)
 		
 	}else if( (s->is_streamed && offset1>0) || /*can't suport seek,and can support read seek.*/
 			((offset1>0 &&  s->is_slowmedia) && 	/*is slowmedia and seek formard*/
-			(offset1<lp->buffer_size-lp->block_read_size && offset1<=lp->max_read_seek) &&/*don't do too big size seek*/ 
-			(lp->file_size<=0 || (lp->file_size>0 && offset1<lp->file_size/2)) &&/*if offset1>filesize/2,thendo first seek end,don't buffer*/
-			(offset1<=((lp->seekflags&LESS_READ_SEEK)?lp->max_read_seek/16:lp->max_read_seek))))/*do less readseek,if have less seek flags*/
+			(offset1<lp->buffer_size-lp->block_read_size && offset1<=((lp->seekflags&MORE_READ_SEEK)?lp->max_read_seek*4:lp->max_read_seek)) &&/*don't do too big size seek*/ 
+			(lp->file_size<=0 || (lp->file_size>0 && offset1<(3*lp->file_size/4))) &&/*if offset1>filesize*3/4,thendo first seek end,don't buffer*/
+			(offset1<=((lp->seekflags&LESS_READ_SEEK)?lp->max_read_seek/16:((lp->seekflags&MORE_READ_SEEK)?lp->max_read_seek*4:lp->max_read_seek)))))/*do less readseek,if have less seek flags*/
 	{/*seek to buffer end,but buffer is not full,do read seek*/
 		int read_offset,ret;
 		lp_sprint( AV_LOG_INFO, "url_lpseek:buffer read seek forward offset=%lld offset1=%lld  whence=%d\n",offset,offset1,whence);
@@ -440,8 +471,7 @@ int64_t url_lpseek(URLContext *s, int64_t offset, int whence)
 				offset=ret;/*get error,exit now*/
 				break;
 			}
-		}
-
+		}
 		lp_lock(&lp->mutex);
 	}else
 	{/*not support in buffer seek,do low level seek now*/
@@ -504,9 +534,32 @@ int64_t url_lpexseek(URLContext *s, int64_t offset, int whence)
 	 	}
 		ret= AVERROR(EPIPE);
 	}
+        else if(whence == AVSEEK_CMF_TS_TIME ){
+	 	if(s->prot->url_exseek){
+			if((ret=s->prot->url_exseek(s, offset, AVSEEK_CMF_TS_TIME))>=0)
+			{
+				lp->rp=lp->buffer;
+				lp->wp=lp->buffer;
+				lp->valid_data_size=0;
+				lp->pos=0; 
+				goto seek_end;
+			}
+	 	}
+		ret= AVERROR(EPIPE);
+	}
       else if (whence == AVSEEK_SLICE_BYTIME)
       {
                ret= s->prot->url_seek(s, offset, AVSEEK_SLICE_BYTIME);
+               if (ret < 0){
+                    lp_unlock(&lp->mutex);
+                    return -1;
+               }
+               lp_unlock(&lp->mutex);
+               return ret;
+       }
+      else if (whence == AVSEEK_ITEM_TIME)
+      {
+               ret= s->prot->url_seek(s, offset, AVSEEK_ITEM_TIME);
                if (ret < 0){
                     lp_unlock(&lp->mutex);
                     return -1;
@@ -604,6 +657,16 @@ int64_t url_lp_get_buffed_pos(URLContext *s)
 	/*lp_sprint(AV_LOG_INFO,"buffered pos=%lld,file_size=%lld,percent=%d.%02d%%,buffer_in_cache=%d\n",
 		pos,lp->file_size,(int)(pos*100/lp->file_size),(int)((pos*10000/lp->file_size)%100),buffer_in_cache); */
 	return pos;
+}
+int64_t url_buffed_size(AVIOContext *s)
+{
+	if(!s)
+		return 0;
+	if(s->enabled_lp_buffer){
+		int64_t buffed=url_lp_get_buffed_pos(s->opaque)-avio_seek(s,0,SEEK_CUR);
+		return buffed > 0 ? buffed :0;
+	}else
+		return 0;
 }
 
 int url_lp_intelligent_buffering(URLContext *s,int size)

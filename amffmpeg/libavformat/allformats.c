@@ -23,6 +23,7 @@
 #include "rdt.h"
 #include "url.h"
 #include "avio.h"
+#include "libavformat/ptslist.h"
 #define REGISTER_MUXER(X,x) { \
     extern AVOutputFormat ff_##x##_muxer; \
     if(CONFIG_##X##_MUXER) av_register_output_format(&ff_##x##_muxer); }
@@ -36,6 +37,29 @@
 #define REGISTER_PROTOCOL(X,x) { \
     extern URLProtocol ff_##x##_protocol; \
     if(CONFIG_##X##_PROTOCOL) ffurl_register_protocol(&ff_##x##_protocol, sizeof(ff_##x##_protocol)); }
+
+
+/*
+do nothing,just keep this function for use on top shared lib.
+*/
+static int ffmpeg_api_functions_keeper(void)
+{
+ 	static int inited=0;
+	ptslist_mgr_t *mgr;
+	int64_t pts;
+	int margin=-1;
+	if(inited)
+		return 0;
+	inited;
+	mgr=ptslist_alloc(0);
+	if(!mgr)
+		return 0;
+	ptslist_chekin(mgr,1,1);
+	ptslist_lookup(mgr,0,&pts,&margin);
+	ptslist_dump_all(mgr);
+	ptslist_free(mgr);
+	return 0;
+}
 
 void av_register_all(void)
 {
@@ -275,4 +299,8 @@ extern URLProtocol ff_hls_protocol ;
 extern URLProtocol ff_cmftest_protocol	;
 	ffurl_register_protocol(&ff_cmftest_protocol,sizeof(ff_cmftest_protocol));
 	ffmpeg_pthread_map_init();
+
+	ffmpeg_api_functions_keeper();
 }
+
+

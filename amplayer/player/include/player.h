@@ -6,7 +6,7 @@
 #include <player_type.h>
 #include <player_error.h>
 #include <message.h>
-
+#include <player_dump.h>
 
 #ifdef  __cplusplus
 extern "C" {
@@ -52,7 +52,8 @@ int 	audio_right_mono(int pid);
 int 	audio_stereo(int pid);
 int 	audio_set_spectrum_switch(int pid,int isStart,int interval);
 int 	player_register_update_callback(callback_t *cb,update_state_fun_t up_fn,int interval_s);
-char 	*player_status2str(player_status status);
+char *player_status2str(player_status status);
+char *player_value2str(char *key, int value);
 int 	player_cache_system_init(int enable,const char*dir,int max_size,int block_size);
 
 //control interface
@@ -71,6 +72,9 @@ int   enable_2XYscale();
 int   enable_freescale_MBX();
 int   disable_2X_2XYscale();
 int   GL_2X_scale(int mSwitch);
+int   wait_play_end();
+int64_t player_get_lpbufbuffedsize(int pid);
+int64_t player_get_streambufbuffedsize(int pid);
 
 #ifdef  __cplusplus
 }

@@ -35,9 +35,7 @@
 #include "url.h"
 #include "mmsh.h"
 
-#define MMSH_UNKNOWN               0
-#define MMSH_SEEKABLE                1
-#define MMSH_LIVE                   	2
+
 
 #define CHUNK_HEADER_LENGTH 4   // 2bytes chunk type and 2bytes chunk length.
 #define EXT_HEADER_LENGTH   8   // 4bytes sequence, 2bytes useless and 2bytes chunk length.
@@ -67,7 +65,7 @@ static const char* mmsh_SeekableRequest =
  	"Accept: */*\r\n"
 	USERAGENT
 	"Host: %s:%d\r\n"
-	"Pragma: no-cache,rate=1.000000,request-context=%u\r\n"
+	"Pragma: no-cache,rate=1.000000,request-context=%u,max-duration=%u\r\n"
 	"Pragma: xPlayStrm=1\r\n"
 	CLIENTGUID
 	"Pragma: stream-switch-count=%d\r\n"
@@ -102,6 +100,12 @@ typedef struct {
     int flags;
 } MMSHContext;
 
+typedef enum {
+    MMSH_UNKNOW = 0,
+    MMSH_SEEKABLE,
+    MMSH_LIVE,
+} StreamType;
+
 static int mmsh_close(URLContext *h)
 {
     MMSHContext *mmsh = (MMSHContext *)h->priv_data;
@@ -133,6 +137,7 @@ static ChunkType get_chunk_header(MMSHContext *mmsh, int *len)
     chunk_type = AV_RL16(chunk_header);
     chunk_len  = AV_RL16(chunk_header + 2);
     chunk_type &=0xff7f;//never care B flag in framing header,see 2.2.3.1.1
+    av_log(NULL, AV_LOG_INFO, " chunk type 0x%x,chunk len:%d\n", chunk_type,chunk_len);
     switch (chunk_type&0xff7f) {
     case CHUNK_TYPE_END:
     case CHUNK_TYPE_STREAM_CHANGE:
@@ -147,7 +152,9 @@ static ChunkType get_chunk_header(MMSHContext *mmsh, int *len)
 	 break;
     default:
         av_log(NULL, AV_LOG_ERROR, "Strange chunk type %d\n", chunk_type);
-        return AVERROR_INVALIDDATA;
+        ext_header_len = 0;
+        break;
+        //return AVERROR_INVALIDDATA;
     }
 
     res = ffurl_read_complete(mms->mms_hd, ext_header, ext_header_len);
@@ -158,6 +165,10 @@ static ChunkType get_chunk_header(MMSHContext *mmsh, int *len)
     *len = chunk_len - ext_header_len;
     if (chunk_type == CHUNK_TYPE_END || chunk_type == CHUNK_TYPE_DATA)
         mmsh->chunk_seq = AV_RL32(ext_header);
+
+    if(chunk_type == CHUNK_TYPE_END){
+        av_log(NULL,AV_LOG_INFO,"Reason for End of Stream notificatation Packet,value :0x%x\n",mmsh->chunk_seq);
+    }
     return chunk_type;
 }
 
@@ -251,7 +262,7 @@ static int get_http_header_data(MMSHContext *mmsh)
                     av_log(NULL, AV_LOG_ERROR, "Read other chunk type data failed!\n");
                     return AVERROR(EIO);
                 } else {
-                    av_dlog(NULL, "Skip chunk type %d \n", chunk_type);
+                    av_log(NULL,AV_LOG_WARNING,"Skip chunk type %d \n", chunk_type);
                     continue;
                 }
             }
@@ -268,7 +279,7 @@ static int mmsh_open_internal(URLContext *h, const char *uri, int flags, int tim
     char headers[1024];
     MMSHContext *mmsh;
     MMSContext *mms;	
-   
+    StreamType stype = MMSH_SEEKABLE;
     mmsh = h->priv_data = av_mallocz(sizeof(MMSHContext));     
    
 	
@@ -310,9 +321,22 @@ static int mmsh_open_internal(URLContext *h, const char *uri, int flags, int tim
         av_log(NULL, AV_LOG_ERROR, "Get http header data failed!\n");
         goto fail;
     }
-
-    // close the socket and then reopen it for sending the second play request.
-    ffurl_close(mms->mms_hd);
+    
+    if(mms->mms_hd->prot){
+        int iflag = ff_http_get_broadcast_flag(mms->mms_hd);
+        
+     
+        if(iflag>0){
+            av_log(NULL,AV_LOG_INFO,"Get a broadcast stream flag\n");
+            stype = MMSH_LIVE;
+        }else{
+            av_log(NULL,AV_LOG_INFO,"Get a seekable stream flag\n");
+            stype = MMSH_SEEKABLE;
+        }
+        
+        // close the socket and then reopen it for sending the second play request.
+        ffurl_close(mms->mms_hd);
+    }
     //fix me? just need probe data,for judge live and vod.	
     memset(headers, 0, sizeof(headers));
     if ((err = ffurl_alloc(&mms->mms_hd, httpname, AVIO_FLAG_READ)) < 0) {
@@ -329,11 +353,18 @@ static int mmsh_open_internal(URLContext *h, const char *uri, int flags, int tim
         av_strlcat(stream_selection, tmp, mms->stream_num * 19 + 1);
     }
     // send play request
-    
-    err = snprintf(headers, sizeof(headers),
+
+    if(stype ==MMSH_SEEKABLE){
+        err = snprintf(headers, sizeof(headers),
                    mmsh_SeekableRequest,
-                   host, port, mmsh->request_seq++, mms->stream_num, stream_selection, timestamp);
-	
+                   host, port, mmsh->request_seq++, 0 ,mms->stream_num, stream_selection, timestamp);
+
+    }else if(stype == MMSH_LIVE){
+        err = snprintf(headers, sizeof(headers),
+                   mmsh_LiveRequest,
+                   host, port, mmsh->request_seq++,mms->stream_num, stream_selection);
+
+    }
     av_freep(&stream_selection);
     if (err < 0) {
         av_log(NULL, AV_LOG_ERROR, "Build play request failed!\n");
@@ -346,7 +377,7 @@ static int mmsh_open_internal(URLContext *h, const char *uri, int flags, int tim
     if (err) {
           goto fail;
     }
-
+    h->is_slowmedia=1;
     err = get_http_header_data(mmsh);
     if (err) {
         av_log(NULL, AV_LOG_ERROR, "Get http header data failed!\n");
@@ -400,13 +431,17 @@ static int mmsh_read(URLContext *h, uint8_t *buf, int size)
     int res = 0;
     MMSHContext *mmsh = h->priv_data;
     MMSContext *mms   = &mmsh->mms;
+    int retry=10;	
     do {
         if (mms->asf_header_read_size < mms->asf_header_size) {
             // copy asf header into buffer
             res = ff_mms_read_header(mms, buf, size);
         } else {
-            if (!mms->remaining_in_len && (res = handle_chunk_type(mmsh)))
-                return res;
+            if (!mms->remaining_in_len && (res = handle_chunk_type(mmsh))){
+              	if(retry--<0)/*for loop play,we will get CHUNK_TYPE_END on read.*/
+				return res;
+			continue;	
+            }
             res = ff_mms_read_data(mms, buf, size);
         }
     } while (!res);

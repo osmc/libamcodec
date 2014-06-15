@@ -21,8 +21,6 @@ typedef struct {
     int stop_flag;
     int pause_flag;
     int wait_flag;
-    int mute_flag;
-    int pass_flag;
-    float volume_deamp;
 } alsa_param_t;
+int dummy_alsa_control(char * id_string , long vol, int rw, long * value);
 #endif

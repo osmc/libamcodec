@@ -24,11 +24,15 @@
 
 #include "url.h"
 
- int CacheHttp_Open(void ** handle,const char* headers);
+ int CacheHttp_Open(void ** handle,const char* headers,void* arg);
  int CacheHttp_Read(void * handle, uint8_t * cache, int size);
  int CacheHttp_Close(void * handle);
  int CacheHttp_GetSpeed(void * handle, int * arg1, int * arg2, int * arg3);
- int CacheHttp_Reset(void * handle);
+ int CacheHttp_Reset(void * handle, int cmf_flag);
+ int CacheHttp_Seek(void * handle, int64_t pos);
  int CacheHttp_GetBuffedTime(void *handle);
+ int CacheHttp_GetBufferPercentage(void *handle,int* per);//from 0~100
+ int CacheHttp_GetEstimateBitrate(void *handle,int64_t* val);
+  int CacheHttp_GetErrorCode(void *handle,int64_t* val);
  
  #endif

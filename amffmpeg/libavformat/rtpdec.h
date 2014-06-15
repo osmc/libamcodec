@@ -141,6 +141,11 @@ typedef struct RTPPacket {
     struct RTPPacket *next;
 } RTPPacket;
 
+typedef struct RTPContext {
+    URLContext *rtp_hd, *rtcp_hd;
+    int rtp_fd, rtcp_fd;
+} RTPContext;
+
 // moved out of rtp.c, because the h264 decoder needs to know about this structure..
 struct RTPDemuxContext {
     AVFormatContext *ic;

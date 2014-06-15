@@ -90,6 +90,7 @@ static const ff_asf_guid stream_bitrate_guid = { /* (http://get.to/sdp) */
 
 static int video_stream_num = 0, audio_stream_num = 0;
 static uint64_t avg_frame_time[128];
+static int last_seekflags = 0;
 
 /**********************************/
 /* decoding */
@@ -1376,6 +1377,10 @@ static int asf_read_seek(AVFormatContext *s, int stream_index, int64_t pts, int 
         }
     }
     /* no index or seeking by index failed */
+    if (flags != last_seekflags) {
+        last_seekflags = flags;
+        s->seek_binary_failed = 0;
+    }
     if(av_seek_frame_binary(s, stream_index, pts, flags)<0)
         return -1;
     asf_reset_header(s);

@@ -41,10 +41,20 @@ static void vcodec_info_init(play_para_t *p_para, codec_para_t *v_codec)
     v_codec->noblock = !!p_para->buffering_enable;
     if ((vinfo->video_format == VFORMAT_MPEG4)
         || (vinfo->video_format == VFORMAT_H264)
-        || (vinfo->video_format == VFORMAT_H264MVC)) {
+        || (vinfo->video_format == VFORMAT_H264MVC)
+        || (vinfo->video_format == VFORMAT_H264_4K2K)) {
         v_codec->am_sysinfo.param = (void *)EXTERNAL_PTS;
         if (((vinfo->video_format == VFORMAT_H264) || (vinfo->video_format == VFORMAT_H264MVC)) && (p_para->file_type == AVI_FILE)) {
             v_codec->am_sysinfo.param     = (void *)(EXTERNAL_PTS | SYNC_OUTSIDE);
+        }
+        if ((vinfo->video_format == VFORMAT_H264) && p_para->playctrl_info.iponly_flag) {
+            v_codec->am_sysinfo.param = (void *)(IPONLY_MODE | (int)v_codec->am_sysinfo.param);
+        }
+        if ((vinfo->video_format == VFORMAT_H264) && p_para->playctrl_info.no_dec_ref_buf) {
+            v_codec->am_sysinfo.param = (void *)(NO_DEC_REF_BUF | (int)v_codec->am_sysinfo.param);
+        }
+        if ((vinfo->video_format == VFORMAT_H264) && p_para->playctrl_info.no_error_recovery) {
+            v_codec->am_sysinfo.param = (void *)(NO_ERROR_RECOVERY | (int)v_codec->am_sysinfo.param);
         }
     } else if ((vinfo->video_format == VFORMAT_VC1) && (p_para->file_type == AVI_FILE)) {
         v_codec->am_sysinfo.param = (void *)EXTERNAL_PTS;
@@ -69,14 +79,15 @@ static void acodec_info_init(play_para_t *p_para, codec_para_t *a_codec)
     a_codec->noblock = !!p_para->buffering_enable;
     a_codec->avsync_threshold = p_para->start_param->avsync_threshold;
     a_codec->stream_type = stream_type_convert(p_para->stream_type, 0, a_codec->has_audio);
+	a_codec->switch_audio_flag = 0;
     log_print("[%s:%d]audio stream_type=%d afmt=%d apid=%d asample_rate=%d achannel=%d\n",
               __FUNCTION__, __LINE__, a_codec->stream_type, a_codec->audio_type, a_codec->audio_pid,
               a_codec->audio_samplerate, a_codec->audio_channels);
+	pCodecCtx = p_para->pFormatCtx->streams[p_para->astream_info.audio_index]->codec;
 
     /*if ((a_codec->audio_type == AFORMAT_ADPCM) || (a_codec->audio_type == AFORMAT_WMA) || (a_codec->audio_type == AFORMAT_WMAPRO) || (a_codec->audio_type == AFORMAT_PCM_S16BE) || (a_codec->audio_type == AFORMAT_PCM_S16LE) || (a_codec->audio_type == AFORMAT_PCM_U8) \
         ||(a_codec->audio_type == AFORMAT_AMR)) {*/
     if (IS_AUIDO_NEED_EXT_INFO(a_codec->audio_type)) {
-        pCodecCtx = p_para->pFormatCtx->streams[p_para->astream_info.audio_index]->codec;
         if ((a_codec->audio_type == AFORMAT_ADPCM) || (a_codec->audio_type == AFORMAT_ALAC)) {
             a_codec->audio_info.bitrate = pCodecCtx->sample_fmt;
         } else if (a_codec->audio_type == AFORMAT_APE) {
@@ -101,6 +112,11 @@ static void acodec_info_init(play_para_t *p_para, codec_para_t *a_codec)
                   a_codec->audio_info.sample_rate, a_codec->audio_info.channels, a_codec->audio_info.extradata_size, a_codec->audio_info.block_align, a_codec->audio_info.codec_id);
 
     }
+	a_codec->SessionID = p_para->start_param->SessionID;		
+	if(IS_AUDIO_NOT_SUPPORTED_BY_AUDIODSP(a_codec->audio_type,pCodecCtx)){
+			a_codec->dspdec_not_supported = 1;
+			log_print("main profile aac not supported by dsp decoder,so set dspdec_not_supported flag\n");
+	}	
 }
 
 static void scodec_info_init(play_para_t *p_para, codec_para_t *s_codec)
@@ -184,6 +200,12 @@ static int stream_es_init(play_para_t *p_para)
         }
         p_para->scodec = s_codec;
     }
+
+    if (v_codec) {
+        codec_set_freerun_mode(v_codec, p_para->playctrl_info.freerun_mode);
+        codec_set_vsync_upint(v_codec, p_para->playctrl_info.vsync_upint);
+    }
+    
     return PLAYER_SUCCESS;
 
 error1:

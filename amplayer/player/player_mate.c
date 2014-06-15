@@ -57,6 +57,7 @@ void *player_mate_init(play_para_t *player, int intervals)
     log_print("player mate init ok mate=%x(%d)\n", mate, sizeof(struct player_mate));
     player->player_mate = mate;
     ret = pthread_create(&tid, &pthread_attr, (void*)&player_mate_thread_run, (void*)player);
+    //pthread_setname_np(tid,"AmplayerMate");
     mate->pthread_id = tid;
     return (void *)mate;
 }
@@ -84,9 +85,14 @@ int player_mate_sleep(play_para_t *player)
     if (!mate) {
         return -1;
     }
+    if(player->playctrl_info.temp_interrupt_ffmpeg){
+	     player->playctrl_info.temp_interrupt_ffmpeg=0;	
+	     log_print("ffmpeg_uninterrupt tmped by player mate!\n");	 
+            ffmpeg_uninterrupt(player->thread_mgt.pthread_id);
+    }
+    mate->mate_should_sleep = 1;	 
     while (mate->mate_isrunng) {
         pthread_mutex_lock(&mate->pthread_mutex);
-        mate->mate_should_sleep = 1;
         ret = pthread_cond_signal(&mate->pthread_cond);
         pthread_mutex_unlock(&mate->pthread_mutex);
         if (mate->mate_isrunng) {
@@ -140,65 +146,79 @@ static int player_mate_thread_cmd_proxy(play_para_t *player, struct player_mate 
 {
     player_cmd_t *cmd = NULL;
     int ret;
+    play_para_t *p_para=player;
     /*
     check the cmd & do for main thread;
     */
-    lock_message_pool(player);
-    cmd = peek_message_locked(player);
-    if (cmd) {
-        mate_print("[MATE]Get cmd-------------------------[%x],[%x]\n", cmd->ctrl_cmd, (CMD_START | CMD_PAUSE | CMD_RESUME | CMD_SWITCH_AID));
-        if (((cmd->ctrl_cmd) & (CMD_START | CMD_PAUSE | CMD_RESUME | CMD_SWITCH_AID)) ||
-            ((cmd->set_mode) & (CMD_LOOP | CMD_NOLOOP | CMD_EN_AUTOBUF | CMD_SET_AUTOBUF_LEV))) {
-            cmd = get_message_locked(player);
+      if (p_para->oldcmd.ctrl_cmd == CMD_SEARCH &&
+        nextcmd_is_cmd(p_para, CMD_SEARCH) &&
+        ((p_para->oldcmdtime >= player_get_systemtime_ms() - 400)) && /*lastcmd is not too old.*/
+        ((p_para->stream_type == STREAM_ES && p_para->vcodec != NULL) || /*ES*/
+         (p_para->stream_type != STREAM_ES  && p_para->codec && p_para->vstream_info.has_video))) { /*PS,RM,TS*/
+        /*if latest cmd and next cmd are all search,we must wait the frame show.*/
+        if (p_para->vcodec) {
+            ret = codec_get_cntl_state(p_para->vcodec);    /*es*/
         } else {
-            cmd = NULL;
+            ret = codec_get_cntl_state(p_para->codec);    /*not es*/
         }
-    }
-    unlock_message_pool(player);
+        if(p_para->avsynctmpchanged == 0) {
+            p_para->oldavsyncstate = get_tsync_enable();
+        }
+        if (p_para->oldavsyncstate == 1) {
+            set_tsync_enable(0);
+            p_para->avsynctmpchanged = 1;
+        }
+        if (ret <= 0) {
+            return NONO_FLAG;
+        }
+    }	
+    cmd = get_message(player);
     if (!cmd) {
-        return 0;    /*no I can handle cmd*/
+        return 0;    /*no cmds*/
     }
 
-    if (cmd->ctrl_cmd & CMD_PAUSE) {
-        mate_print("[MATE]Get puase cmd\n");
-        if (get_player_state(player) != PLAYER_PAUSE) {
-            ret = codec_pause(player->codec);
+    p_para->oldcmd = *cmd;
+    p_para->oldcmdtime = player_get_systemtime_ms();
+    log_print("pid[%d]:: [check_flag:%d]cmd=%x set_mode=%x info=%x param=%d fparam=%f\n", p_para->player_id, __LINE__, cmd->ctrl_cmd, cmd->set_mode, cmd->info_cmd, cmd->param, cmd->f_param);
+    if (cmd->ctrl_cmd != CMD_SEARCH && p_para->avsynctmpchanged > 0) {
+		/*not search now,resore the sync states...*/
+		set_tsync_enable(p_para->oldavsyncstate);
+		p_para->avsynctmpchanged = 0;
+    }	
+    check_msg(player,cmd);
+    message_free(cmd);
+    if(player->playctrl_info.search_flag){
+	/*in mate thread seek,and interrupt the read thread.
+	    so we need to ignore the first ffmpeg erros.
+	*/
+	player->playctrl_info.ignore_ffmpeg_errors=1;	
+	player->playctrl_info.temp_interrupt_ffmpeg=1;
+	log_print("ffmpeg_interrupt tmped by player mate!\n");
+	ffmpeg_interrupt(player->thread_mgt.pthread_id);
+	codec_resume(player->codec);  /*auto resume on*/
+    }
+    if (p_para->playctrl_info.pause_flag) {
+        if (get_player_state(p_para) != PLAYER_PAUSE) {
+            ret = codec_pause(p_para->codec);
             if (ret != 0) {
                 log_error("[%s:%d]pause failed!ret=%d\n", __FUNCTION__, __LINE__, ret);
             }
-            player->playctrl_info.pause_flag = 1;
-            set_player_state(player, PLAYER_PAUSE);
-            update_playing_info(player);
-            update_player_states(player, 1);
+            set_player_state(p_para, PLAYER_PAUSE);
+            update_playing_info(p_para);
+            update_player_states(p_para, 1);
         }
-    } else if ((cmd->ctrl_cmd & CMD_RESUME) || (cmd->ctrl_cmd & CMD_START)) {
-        mate_print("[MATE]Get resume cmd\n");
-        if ((get_player_state(player) == PLAYER_PAUSE) || (get_player_state(player) == PLAYER_SEARCHOK)) {
-            ret = codec_resume(player->codec);
+        return CONTINUE_FLAG;
+    } else {
+        if ((get_player_state(p_para) == PLAYER_PAUSE) || (get_player_state(p_para) == PLAYER_SEARCHOK)) {
+            ret = codec_resume(p_para->codec);
             if (ret != 0) {
                 log_error("[%s:%d]resume failed!ret=%d\n", __FUNCTION__, __LINE__, ret);
             }
-            player->playctrl_info.pause_flag = 0;
-            set_player_state(player, PLAYER_RUNNING);
-            update_playing_info(player);
-            update_player_states(player, 1);
+            set_player_state(p_para, PLAYER_RUNNING);
+            update_playing_info(p_para);
+            update_player_states(p_para, 1);
         }
-    } else if (cmd->ctrl_cmd & CMD_SWITCH_AID) {
-        player->playctrl_info.seek_base_audio = 1;
-        player->playctrl_info.switch_audio_id = cmd->param;
-        set_black_policy(0);
-    } else if (cmd->set_mode & CMD_LOOP) {
-        player->playctrl_info.loop_flag = 1;
-    } else if (cmd->set_mode & CMD_NOLOOP) {
-        player->playctrl_info.loop_flag = 0;
-    } else if (cmd->set_mode & CMD_EN_AUTOBUF) {
-        player->buffering_enable = cmd->param;
-    } else if (cmd->set_mode & CMD_SET_AUTOBUF_LEV) {
-        player->buffering_threshhold_min = cmd->f_param;
-        player->buffering_threshhold_middle = cmd->f_param1;
-        player->buffering_threshhold_max = cmd->f_param2;
     }
-    message_free(cmd);
     return 0;
 }
 

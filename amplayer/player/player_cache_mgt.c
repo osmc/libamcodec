@@ -20,7 +20,7 @@
 
 #include "player_cache_file.h"
 
-#include <libavformat/aviolpcache.h>
+#include "libavformat/aviolpcache.h"
 
 
 #include <pthread.h>
@@ -95,9 +95,7 @@ static unsigned long cache_client_open(const char *url, int64_t filesize)
         struct cache_file *cache;
         int cachesize = 0;
         float defaultnofilesizesize = 0;
-#ifdef ANDROID
         am_getconfig_float("media.libplayer.defcachefile", &defaultnofilesizesize);
-#endif
         if (defaultnofilesizesize < 0 || defaultnofilesizesize >= cache_setting.max_cache_size) {
             defaultnofilesizesize = 50 * 1024 * 1024;    /*defaut value*/
         }

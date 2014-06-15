@@ -24,9 +24,6 @@
 #include <audio_priv.h>
 #include "codec_h_ctrl.h"
 #include <adec-external-ctrl.h>
-#ifdef ANDROID
-#include <cutils/properties.h>
-#endif
 
 #define SUBTITLE_EVENT
 #define TS_PACKET_SIZE 188
@@ -640,15 +637,10 @@ int codec_init(codec_para_t *pcodec)
     int ret;
     //if(pcodec->has_audio)
     //  audio_stop();
-#ifdef ANDROID
-    char value[PROPERTY_VALUE_MAX];
-    if (property_get("ro.platform.xbmc.support", value, NULL) > 0) {
-      if ((property_get("ro.pivos.key1", value, NULL) <= 0 || strcmp(value, "JSy9mSIWGcV8gs6x") != 0))
-        return -CODEC_ERROR_INIT_FAILED;
-    } else {
-      return -CODEC_ERROR_INIT_FAILED;
-    }
-#endif
+    pcodec->handle = -1;
+    pcodec->cntl_handle = -1;
+    pcodec->sub_handle = -1;
+    pcodec->audio_utils_handle = -1;
     switch (pcodec->stream_type) {
     case STREAM_TYPE_ES_VIDEO:
         ret = codec_video_es_init(pcodec);
@@ -684,10 +676,10 @@ int codec_init(codec_para_t *pcodec)
         return -CODEC_ERROR_SET_BUFSIZE_FAILED;
     }
     ret = codec_h_control(pcodec->handle, AMSTREAM_IOC_PORT_INIT, 0);
-    if (ret != 0) {
-
+    if (ret != 0) {        
         return -CODEC_ERROR_INIT_FAILED;
     }
+    
     if (pcodec->has_audio) {
         arm_audio_info a_ainfo;
         memset(&a_ainfo,0,sizeof(arm_audio_info));
@@ -697,13 +689,34 @@ int codec_init(codec_para_t *pcodec)
         a_ainfo.handle=pcodec->handle;
 		a_ainfo.SessionID=pcodec->SessionID;
 		a_ainfo.dspdec_not_supported = pcodec->dspdec_not_supported;
+		a_ainfo.droppcm_flag = 0;
+        a_ainfo.bitrate    =pcodec->audio_info.bitrate;
+        a_ainfo.block_align=pcodec->audio_info.block_align;
+        a_ainfo.codec_id   =pcodec->audio_info.codec_id;
         if(IS_AUIDO_NEED_EXT_INFO(pcodec->audio_type))
         {
-            a_ainfo.extradata_size=pcodec->audio_info.extradata_size;
-            if(a_ainfo.extradata_size>0&&a_ainfo.extradata_size<=AUDIO_EXTRA_DATA_SIZE)
-                memcpy((char*)a_ainfo.extradata,pcodec->audio_info.extradata,a_ainfo.extradata_size);
-            else
-                a_ainfo.extradata_size=0;
+            if(pcodec->audio_type!=AFORMAT_WMA && pcodec->audio_type!=AFORMAT_WMAPRO)
+            {
+                 a_ainfo.extradata_size=pcodec->audio_info.extradata_size;
+                 if(a_ainfo.extradata_size>0&&a_ainfo.extradata_size<=AUDIO_EXTRA_DATA_SIZE)
+                     memcpy((char*)a_ainfo.extradata,pcodec->audio_info.extradata,a_ainfo.extradata_size);
+                 else
+                    a_ainfo.extradata_size=0;
+            }else{
+                 Asf_audio_info_t asfinfo={0};
+                 asfinfo.bitrate    =pcodec->audio_info.bitrate;
+                 asfinfo.block_align=pcodec->audio_info.block_align;
+                 asfinfo.channels   =pcodec->audio_info.channels;
+                 asfinfo.codec_id   =pcodec->audio_info.codec_id;
+                 asfinfo.sample_rate=pcodec->audio_info.sample_rate;
+                 asfinfo.valid      =pcodec->audio_info.valid;
+                 if(pcodec->audio_info.extradata_size<=512){
+                     memcpy(asfinfo.extradata,pcodec->audio_info.extradata,pcodec->audio_info.extradata_size);  
+                     asfinfo.extradata_size=pcodec->audio_info.extradata_size;
+                 }
+                 memcpy((char*)a_ainfo.extradata,&asfinfo,sizeof(Asf_audio_info_t));
+                 a_ainfo.extradata_size=sizeof(Asf_audio_info_t);
+            }
         }
         audio_start(&pcodec->adec_priv, &a_ainfo);
         if(pcodec->avsync_threshold > 0)
@@ -813,15 +826,40 @@ void codec_resume_audio(codec_para_t *pcodec, unsigned int orig)
         a_ainfo.format=pcodec->audio_type;
         a_ainfo.handle=pcodec->handle;
 		a_ainfo.dspdec_not_supported = pcodec->dspdec_not_supported;
+        a_ainfo.bitrate    =pcodec->audio_info.bitrate;
+        a_ainfo.block_align=pcodec->audio_info.block_align;
+        a_ainfo.codec_id   =pcodec->audio_info.codec_id;
+		if (pcodec->switch_audio_flag) {
+			a_ainfo.droppcm_flag = pcodec->switch_audio_flag;
+			if(pcodec->stream_type == STREAM_TYPE_TS || pcodec->stream_type == STREAM_TYPE_PS)
+				a_ainfo.droppcm_flag = 0;
+			pcodec->switch_audio_flag = 0;
+		}
         if(IS_AUIDO_NEED_EXT_INFO(pcodec->audio_type))
         {
-            a_ainfo.extradata_size=pcodec->audio_info.extradata_size;
-            if(a_ainfo.extradata_size>0&&a_ainfo.extradata_size<=AUDIO_EXTRA_DATA_SIZE)
-                memcpy((char*)a_ainfo.extradata,pcodec->audio_info.extradata,a_ainfo.extradata_size);
-            else
-                a_ainfo.extradata_size=0;
+            if(pcodec->audio_type!=AFORMAT_WMA && pcodec->audio_type!=AFORMAT_WMAPRO)
+            {
+                 a_ainfo.extradata_size=pcodec->audio_info.extradata_size;
+                 if(a_ainfo.extradata_size>0&&a_ainfo.extradata_size<=AUDIO_EXTRA_DATA_SIZE)
+                     memcpy((char*)a_ainfo.extradata,pcodec->audio_info.extradata,a_ainfo.extradata_size);
+                 else
+                     a_ainfo.extradata_size=0;
+            }else{
+                 Asf_audio_info_t asfinfo={0};
+                 asfinfo.bitrate    =pcodec->audio_info.bitrate;
+                 asfinfo.block_align=pcodec->audio_info.block_align;
+                 asfinfo.channels   =pcodec->audio_info.channels;
+                 asfinfo.codec_id   =pcodec->audio_info.codec_id;
+                 asfinfo.sample_rate=pcodec->audio_info.sample_rate;
+                 asfinfo.valid	   =pcodec->audio_info.valid;
+                 if(pcodec->audio_info.extradata_size<=512){
+                     memcpy(asfinfo.extradata,pcodec->audio_info.extradata,pcodec->audio_info.extradata_size);  
+                     asfinfo.extradata_size=pcodec->audio_info.extradata_size;
+                 }
+                 memcpy((char*)a_ainfo.extradata,&asfinfo,sizeof(Asf_audio_info_t));
+                 a_ainfo.extradata_size=sizeof(Asf_audio_info_t);
+            }
         }
-		
         audio_start(&pcodec->adec_priv, &a_ainfo);
     }
     return;
@@ -914,10 +952,8 @@ int codec_get_vdec_state(codec_para_t *p, struct vdec_status *vdec)
 /* --------------------------------------------------------------------------*/
 int codec_get_adec_state(codec_para_t *p, struct adec_status *adec)
 {
-#ifdef ANDROID
     if(get_audio_decoder()!=AUDIO_ARC_DECODER)
-    return get_decoder_status(p->adec_priv,adec);
-#endif
+	return get_decoder_status(p->adec_priv,adec);
     int r;
     struct am_io_param am_io;
     r = codec_h_control(p->handle, AMSTREAM_IOC_ADECSTAT, (unsigned long)&am_io);
@@ -1674,6 +1710,34 @@ int codec_get_pcrscr(codec_para_t *pcodec)
 
     return pcrscr;
 }
+/* --------------------------------------------------------------------------*/
+/**
+* @brief  codec_get_scrstate  get audio video codec state
+*
+* @param[in]  pcodec  Pointer of codec parameter structure
+*
+* @param[in]  valid sys start time.
+*
+* @return     2 TSYNC_STAT_PCRSCR_SETUP_AUDIO; 1 TSYNC_STAT_PCRSCR_SETUP_VIDEO
+*                 0 TSYNC_STAT_PCRSCR_SETUP_NONE
+*/
+/* --------------------------------------------------------------------------*/
+unsigned int codec_get_scrstate(codec_para_t *pcodec, unsigned long *time)
+{
+    int ret;
+
+    if (pcodec->cntl_handle < 0) {
+        return -1;
+    }
+	
+    ret = ioctl(pcodec->cntl_handle, AMSTREAM_IOC_GET_SCR_STATE, time);
+    if (ret < 0) {
+		CODEC_PRINT("[%s] ioctl failed %d\n", __FUNCTION__, ret);
+        return ret;
+    }	
+	
+    return ret;
+}
 
 /* --------------------------------------------------------------------------*/
 /**
@@ -1793,6 +1857,78 @@ int codec_get_sync_video_discont(codec_para_t *pcodec)
 
 /* --------------------------------------------------------------------------*/
 /**
+* @brief  codec_get_sync_audio_discont_diff  get audio sync discontinue state
+*
+* @param[in]  pcodec       Pointer of codec parameter structure
+*
+* @return     discontiue diff, or fail if < 0
+*/
+/* --------------------------------------------------------------------------*/
+unsigned long codec_get_sync_audio_discont_diff(codec_para_t *pcodec)
+{
+    unsigned long discontinue_diff = 0;
+    int ret;
+
+    ret = codec_h_control(pcodec->cntl_handle, AMSTREAM_IOC_GET_SYNC_ADISCON_DIFF, (unsigned long)&discontinue_diff);
+    if (ret < 0) {
+        return ret;
+    }	
+    return discontinue_diff;   
+}
+
+/* --------------------------------------------------------------------------*/
+/**
+* @brief  codec_get_sync_video_discont_diff  get audio sync discontinue state
+*
+* @param[in]  pcodec       Pointer of codec parameter structure
+*
+* @return     discontiue diff, or fail if < 0
+*/
+/* --------------------------------------------------------------------------*/
+unsigned long codec_get_sync_video_discont_diff(codec_para_t *pcodec)
+{
+    unsigned long discontinue_diff = 0;
+    int ret;
+
+    ret = codec_h_control(pcodec->cntl_handle, AMSTREAM_IOC_GET_SYNC_VDISCON_DIFF, (unsigned long)&discontinue_diff);
+    if (ret < 0) {
+        return ret;
+    }	
+    return discontinue_diff;   
+}
+
+/* --------------------------------------------------------------------------*/
+/**
+* @brief  codec_set_sync_audio_discont_diff  set sync discontinue diff
+*
+* @param[in]  pcodec       Pointer of codec parameter structure
+* @param[in]  discontinue_diff  Discontinue diff to be set
+*
+* @return     0 for success, or fail type if < 0
+*/
+/* --------------------------------------------------------------------------*/
+int codec_set_sync_audio_discont_diff(codec_para_t *pcodec, unsigned long discontinue_diff)
+{
+    return codec_h_control(pcodec->cntl_handle, AMSTREAM_IOC_SET_SYNC_ADISCON_DIFF, discontinue_diff);
+}
+
+/* --------------------------------------------------------------------------*/
+/**
+* @brief  codec_set_sync_video_discont_diff  set sync discontinue diff
+*
+* @param[in]  pcodec       Pointer of codec parameter structure
+* @param[in]  discontinue_diff  Discontinue diff to be set
+*
+* @return     0 for success, or fail type if < 0
+*/
+/* --------------------------------------------------------------------------*/
+int codec_set_sync_video_discont_diff(codec_para_t *pcodec, unsigned long discontinue_diff)
+{
+    return codec_h_control(pcodec->cntl_handle, AMSTREAM_IOC_SET_SYNC_VDISCON_DIFF, discontinue_diff);
+}
+
+/* --------------------------------------------------------------------------*/
+/**
 * @brief  codec_get_sub_num  get the number of subtitle
 *
 * @param[in]  pcodec       Pointer of codec parameter structure
@@ -1857,4 +1993,314 @@ int codec_set_av_threshold(codec_para_t *pcodec, int threshold)
     }
     
     return ret;
+}
+
+/* --------------------------------------------------------------------------*/
+/**
+* @brief  codec_get_freerun_mode  Get the mode of video freerun
+*
+* @param[in]  pcodec  Pointer of codec parameter structure
+*
+* @return     Video free run mode or fail error type
+*/
+/* --------------------------------------------------------------------------*/
+int codec_get_freerun_mode(codec_para_t *pcodec)
+{
+    int freerun_mode, r;
+
+    if (pcodec->cntl_handle == 0) {
+        CODEC_PRINT("no control handler\n");
+        return 0;
+    }
+
+    r = codec_h_control(pcodec->cntl_handle, AMSTREAM_IOC_GET_FREERUN_MODE, (unsigned long)&freerun_mode);
+    if (r < 0) {
+        return system_error_to_codec_error(r);
+    } else {
+        return freerun_mode;
+    }
+}
+
+/* --------------------------------------------------------------------------*/
+/**
+* @brief  codec_set_freerun_mode  Set the mode to video freerun
+*
+* @param[in]  pcodec  Pointer of codec parameter structure
+* @param[in]  mode    Freerun mode to be set
+*
+* @return     0 for success, or fail type if < 0
+*/
+/* --------------------------------------------------------------------------*/
+int codec_set_freerun_mode(codec_para_t *pcodec, unsigned int mode)
+{
+    return codec_h_control(pcodec->cntl_handle, AMSTREAM_IOC_SET_FREERUN_MODE, (unsigned long)mode);
+}
+
+/* --------------------------------------------------------------------------*/
+/**
+* @brief  codec_init_audio_utils  Initialize the audio utils device
+*
+* @param[in]  pcodec  Pointer of codec parameter structure
+*
+* @return     Success or fail error type
+*/
+/* --------------------------------------------------------------------------*/
+int codec_init_audio_utils(codec_para_t *pcodec)
+{
+    CODEC_HANDLE audio_utils;
+
+    audio_utils = codec_h_open(CODEC_AUDIO_UTILS_DEVICE, O_RDONLY);
+    if (audio_utils < 0) {
+        CODEC_PRINT("get %s failed\n", CODEC_AUDIO_UTILS_DEVICE);
+        return system_error_to_codec_error(audio_utils);
+    }
+
+    pcodec->audio_utils_handle = audio_utils;
+    
+    return CODEC_ERROR_NONE;
+}
+
+/* --------------------------------------------------------------------------*/
+/**
+* @brief  codec_release_audio_utils  Release the audio utils device
+*
+* @param[in]  pcodec  Pointer of codec parameter structure
+*
+* @return     Success or fail error type
+*/
+/* --------------------------------------------------------------------------*/
+int codec_release_audio_utils(codec_para_t *pcodec)
+{
+    if (pcodec) {
+        if(pcodec->audio_utils_handle>=0)
+            codec_h_close(pcodec->audio_utils_handle);
+    }
+
+    pcodec->audio_utils_handle = -1;
+    
+    return CODEC_ERROR_NONE;
+}
+
+/* --------------------------------------------------------------------------*/
+/**
+* @brief  codec_set_audio_resample_ena  Set audio resample
+*
+* @param[in]  pcodec  Pointer of codec parameter structure
+*
+* @return     Success or fail error type
+*/
+/* --------------------------------------------------------------------------*/
+int codec_set_audio_resample_ena(codec_para_t *pcodec, unsigned long mode)
+{
+    return codec_h_control(pcodec->audio_utils_handle, AMAUDIO_IOC_SET_RESAMPLE_ENA, mode);
+}
+
+/* --------------------------------------------------------------------------*/
+/**
+* @brief  codec_set_audio_resample_ena  Set audio resample enable
+*
+* @param[in]  pcodec  Pointer of codec parameter structure
+*
+* @return     Success or fail error type
+*/
+/* --------------------------------------------------------------------------*/
+int codec_get_audio_resample_ena(codec_para_t *pcodec)
+{
+    unsigned long audio_resample_ena;
+    int ret;
+    ret = codec_h_control(pcodec->audio_utils_handle, AMAUDIO_IOC_GET_RESAMPLE_ENA, &audio_resample_ena);
+    if (ret < 0) {
+        return system_error_to_codec_error(ret);
+    } else {
+        return audio_resample_ena;
+    }
+}
+
+/* --------------------------------------------------------------------------*/
+/**
+* @brief  codec_set_audio_resample_type  Set audio resample type
+*
+* @param[in]  pcodec  Pointer of codec parameter structure
+*
+* @return     Success or fail error type
+*/
+/* --------------------------------------------------------------------------*/
+int codec_set_audio_resample_type(codec_para_t *pcodec, unsigned long type)
+{
+    return codec_h_control(pcodec->audio_utils_handle, AMAUDIO_IOC_SET_RESAMPLE_TYPE, type);
+}
+
+/* --------------------------------------------------------------------------*/
+/**
+* @brief  codec_set_video_delay_limited_ms  Set video buffer max delayed,if> settings,write may wait& again,
+*
+* @param[in]  pcodec  Pointer of codec parameter structure
+*
+* @return     0 for success, or fail type if < 0
+*/
+/* --------------------------------------------------------------------------*/
+int codec_set_video_delay_limited_ms(codec_para_t *pcodec,int delay_ms)
+{
+    return codec_h_control(pcodec->handle, AMSTREAM_IOC_SET_VIDEO_DELAY_LIMIT_MS, delay_ms);
+}
+/* --------------------------------------------------------------------------*/
+/**
+* @brief  codec_get_video_delay_limited_ms  Set video buffer max delayed,if> settings,write may wait& again,
+*
+* @param[in]  pcodec  Pointer of codec parameter structure
+*
+* @return     0 for success, or fail type if < 0
+*/
+/* --------------------------------------------------------------------------*/
+int codec_get_video_delay_limited_ms(codec_para_t *pcodec,int *delay_ms)
+{
+    return codec_h_control(pcodec->handle, AMSTREAM_IOC_GET_VIDEO_DELAY_LIMIT_MS, delay_ms);
+}
+
+
+/* --------------------------------------------------------------------------*/
+/**
+* @brief  codec_set_video_delay_limited_ms  Set video buffer max delayed,if> settings,write may wait& again,
+*
+* @param[in]  pcodec  Pointer of codec parameter structure
+*
+* @return     0 for success, or fail type if < 0
+*/
+/* --------------------------------------------------------------------------*/
+int codec_set_audio_delay_limited_ms(codec_para_t *pcodec,int delay_ms)
+{
+    return codec_h_control(pcodec->handle, AMSTREAM_IOC_SET_AUDIO_DELAY_LIMIT_MS, delay_ms);
+}
+
+/* --------------------------------------------------------------------------*/
+/**
+* @brief  codec_get_audio_delay_limited_ms  get video buffer max delayed,if> settings,write may wait& again,
+*
+* @param[in]  pcodec  Pointer of codec parameter structure
+*
+* @return     0 for success, or fail type if < 0
+*/
+/* --------------------------------------------------------------------------*/
+int codec_get_audio_delay_limited_ms(codec_para_t *pcodec,int *delay_ms)
+{
+    return codec_h_control(pcodec->handle, AMSTREAM_IOC_GET_AUDIO_DELAY_LIMIT_MS, delay_ms);
+}
+
+/* --------------------------------------------------------------------------*/
+/**
+* @brief  codec_get_audio_cur_delay_ms  get current audio delay ms
+*
+* @param[in]  pcodec  Pointer of codec parameter structure
+*
+* @return     0 for success, or fail type if < 0
+*/
+/* --------------------------------------------------------------------------*/
+int codec_get_audio_cur_delay_ms(codec_para_t *pcodec,int *delay_ms)
+{
+    return codec_h_control(pcodec->handle, AMSTREAM_IOC_GET_AUDIO_CUR_DELAY_MS, delay_ms);
+}
+
+
+/* --------------------------------------------------------------------------*/
+/**
+* @brief  codec_get_video_cur_delay_ms  get video  current delay ms
+*
+* @param[in]  pcodec  Pointer of codec parameter structure
+*
+* @return     0 for success, or fail type if < 0
+*/
+/* --------------------------------------------------------------------------*/
+int codec_get_video_cur_delay_ms(codec_para_t *pcodec,int *delay_ms)
+{
+    return codec_h_control(pcodec->handle, AMSTREAM_IOC_GET_VIDEO_CUR_DELAY_MS, delay_ms);
+}
+
+/* --------------------------------------------------------------------------*/
+/**
+* @brief  codec_get_audio_cur_delay_ms   get vido   latest bitrate.
+*
+* @param[in]  pcodec  Pointer of codec parameter structure
+*
+* @return     0 for success, or fail type if < 0
+*/
+/* --------------------------------------------------------------------------*/
+int codec_get_video_cur_bitrate(codec_para_t *pcodec,int *bitrate)
+{
+    return codec_h_control(pcodec->handle, AMSTREAM_IOC_GET_VIDEO_AVG_BITRATE_BPS, bitrate);
+}
+
+
+/* --------------------------------------------------------------------------*/
+/**
+* @brief  codec_get_audio_cur_bitrate  get audio  latest bitrate.
+*
+* @param[in]  pcodec  Pointer of codec parameter structure
+*
+* @return     0 for success, or fail type if < 0
+*/
+/* --------------------------------------------------------------------------*/
+int codec_get_audio_cur_bitrate(codec_para_t *pcodec,int *bitrate)
+{
+    return codec_h_control(pcodec->handle, AMSTREAM_IOC_GET_AUDIO_AVG_BITRATE_BPS, bitrate);
+}
+
+/* --------------------------------------------------------------------------*/
+/**
+* @brief  codec_set_vsync_upint  Set the mode to video freerun
+*
+* @param[in]  pcodec  Pointer of codec parameter structure
+* @param[in]  mode    vsync upint mode to be set
+*
+* @return     0 for success, or fail type if < 0
+*/
+/* --------------------------------------------------------------------------*/
+int codec_set_vsync_upint(codec_para_t *pcodec, unsigned int mode)
+{
+    return codec_h_control(pcodec->cntl_handle, AMSTREAM_IOC_SET_VSYNC_UPINT, (unsigned long)mode);
+}
+int codec_set_drmmode(codec_para_t *pcodec)
+{
+    return codec_h_control(pcodec->handle, AMSTREAM_IOC_SET_DRMMODE, 0);
+}
+
+/**
+ *
+ *
+ */
+int codec_get_last_checkout_apts(codec_para_t* pcodec, unsigned long *apts)
+{
+  return codec_h_control(pcodec->handle, AMSTREAM_IOC_GET_LAST_CHECKOUT_APTS, apts);
+}
+
+int codec_get_last_checkin_apts(codec_para_t* pcodec, unsigned long* apts)
+{
+  return codec_h_control(pcodec->handle, AMSTREAM_IOC_GET_LAST_CHECKIN_APTS, apts);
+}
+
+/**
+ *@brief  codec_get_pcm_level get the PCM data in buffer between DSP and output
+ *
+ * @param[in] pcodec Pointer of codec parameter structre
+ * @param[in] level  Address to store "level"
+ * @return 0 for success, or fail type if<0
+ */
+
+int codec_get_pcm_level(codec_para_t* pcodec, unsigned int* level)
+{
+  return audio_get_pcm_level(pcodec->adec_priv);
+}
+
+int codec_set_skip_bytes(codec_para_t* pcodec, unsigned int bytes)
+{
+  return audio_set_skip_bytes(pcodec->adec_priv);
+}
+
+int codec_get_dsp_apts(codec_para_t* pcodec, unsigned int * apts)
+{
+  return audio_get_pts(pcodec->adec_priv, apts);
+}
+/*add for gstreamer fast/slow forward*/
+int codec_set_video_playrate(codec_para_t* pcodec, int rate)
+{
+    return codec_h_control(pcodec->cntl_handle, AMSTREAM_IOC_SET_PLAYRATE, (unsigned long)rate);
 }

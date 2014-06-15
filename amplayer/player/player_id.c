@@ -36,24 +36,29 @@ int player_id_pool_init(void)
 }
 int player_request_pid(void)
 {
-    int i;
+    int i,j;
     int pid = -1;
-    static int last = 0;
+    static int last = -1;
     pthread_mutex_lock(&priv_pid_mutex);
     log_debug1("[player_request_pid:%d]last=%d\n", __LINE__, last);
-    for (i = last; i < MAX_PLAYER_THREADS; i++) {
+    i = last+1;  
+    if (i >= (MAX_PLAYER_THREADS)) {
+         i = 0;
+    } 	
+    for (j=0;j < MAX_PLAYER_THREADS; j++) {
         if (!(priv_pid_pool & (1 << i))) {
             priv_pid_pool |= (1 << i);
             priv_pid_data[i] = NULL;
             priv_pid_used[i] = 0;
             pid = i;
+	     last=i;
             log_debug1("[player_request_pid:%d]last=%d pid=%d\n", __LINE__, last, pid);
-            last = i + 1;
-            if (last == (MAX_PLAYER_THREADS - 1)) {
-                last = 0;
-            }
             break;
         }
+	 i = i + 1;
+        if (i >= (MAX_PLAYER_THREADS)) {
+        	 i = 0;
+	 }
     }
     pthread_mutex_unlock(&priv_pid_mutex);
     return pid;

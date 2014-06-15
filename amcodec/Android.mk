@@ -32,7 +32,7 @@ LOCAL_C_INCLUDES := $(LOCAL_PATH)/include $(LOCAL_PATH)/codec $(LOCAL_PATH)/audi
 
 
 LOCAL_STATIC_LIBRARIES := libamadec
-LOCAL_SHARED_LIBRARIES += libutils libmedia libz libbinder libdl libcutils libc 
+LOCAL_SHARED_LIBRARIES += libutils libmedia libz libbinder libdl libcutils libc libamavutils 
 
 LOCAL_ARM_MODE := arm
 LOCAL_MODULE:= libamcodec

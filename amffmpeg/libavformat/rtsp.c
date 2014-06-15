@@ -1546,7 +1546,16 @@ redirect:
     do {
         int lower_transport = ff_log2_tab[lower_transport_mask &
                                   ~(lower_transport_mask - 1)];
-
+        float value = 0.0;
+        int ret = -1;        
+        ret = am_getconfig_float("libplayer.rtsp.lower_transp", &value);
+        if(ret>=0){
+            if((int)value == RTSP_LOWER_TRANSPORT_UDP){
+                lower_transport = RTSP_LOWER_TRANSPORT_UDP;                
+            }else if((int)value == RTSP_LOWER_TRANSPORT_UDP_MULTICAST){
+                lower_transport = RTSP_LOWER_TRANSPORT_UDP_MULTICAST;
+            }
+        }
         err = ff_rtsp_make_setup_request(s, host, port, lower_transport,
                                  rt->server_type == RTSP_SERVER_REAL ?
                                      real_challenge : NULL);
@@ -1831,8 +1840,9 @@ static int sdp_read_header(AVFormatContext *s, AVFormatParameters *ap)
         char namebuf[50];
         rtsp_st = rt->rtsp_streams[i];
 
-        getnameinfo((struct sockaddr*) &rtsp_st->sdp_ip, sizeof(rtsp_st->sdp_ip),
-                    namebuf, sizeof(namebuf), NULL, 0, NI_NUMERICHOST);
+        //getnameinfo((struct sockaddr*) &rtsp_st->sdp_ip, sizeof(rtsp_st->sdp_ip),
+        //            namebuf, sizeof(namebuf), NULL, 0, NI_NUMERICHOST);
+        av_strlcpy(namebuf,  inet_ntoa( ((struct sockaddr_in *)&(rtsp_st->sdp_ip))->sin_addr), 50) ;
         ff_url_join(url, sizeof(url), "rtp", NULL,
                     namebuf, rtsp_st->sdp_port,
                     "?localport=%d&ttl=%d", rtsp_st->sdp_port,
@@ -1843,6 +1853,15 @@ static int sdp_read_header(AVFormatContext *s, AVFormatParameters *ap)
         }
         if ((err = rtsp_open_transport_ctx(s, rtsp_st)))
             goto fail;
+
+        if(rtsp_st->rtp_handle->priv_data != NULL){
+		 RTPContext *lRtpContext = (RTPContext *)rtsp_st->rtp_handle->priv_data;
+		 if(lRtpContext->rtp_hd != NULL){
+		 	if(strcmp(lRtpContext->rtp_hd->prot->name, "udp") == 0)
+		 		rt->lower_transport = RTSP_LOWER_TRANSPORT_UDP ;
+		 }
+        }
+        
     }
     return 0;
 fail:
@@ -1872,9 +1891,56 @@ AVInputFormat ff_sdp_demuxer = {
 #if CONFIG_RTP_DEMUXER
 static int rtp_probe(AVProbeData *p)
 {
+    if (av_strstart(p->filename, "rtp:", NULL) == NULL)
+	return 0 ;
+
+    if (!ff_network_init())
+        return 0 ;
+
+    URLContext* in = NULL;
+    int score = 0, payload_type = 0;
+    uint8_t recvbuf[1500] = {0} ;
+    int ret = ffurl_open(&in, p->filename, AVIO_FLAG_READ);
+    if (ret)
+      	goto probe_end;
+
+    while (1) {
+      	ret = ffurl_read(in, recvbuf, sizeof(recvbuf));
+       if (ret == AVERROR(EAGAIN))
+        	continue;
+       if (ret < 0)
+            	goto probe_end;
+
+        if (ret < 12) {
+            	av_log(NULL, AV_LOG_WARNING, "Received too short packet\n");
+            	continue;
+        }
+
+        if ((recvbuf[0] & 0xc0) != 0x80) {
+            	av_log(NULL, AV_LOG_WARNING, "Unsupported RTP version packet "
+                                      "received\n");
+            	continue;
+        }
+
+	 payload_type = (recvbuf[1] & 0x7f) ;
+	 score = (payload_type != 33) ? AVPROBE_SCORE_MAX : 0 ;
+        break;
+    }
+    
+probe_end:
+    av_log(NULL, AV_LOG_INFO, "[%s] score = %d, payload_type = %d\n", __FUNCTION__, score, payload_type);
+
+    if(in != NULL)
+    	ffurl_close(in);
+    
+    ff_network_close();
+    return score ;
+
+/*
     if (av_strstart(p->filename, "rtp:", NULL))
         return AVPROBE_SCORE_MAX;
     return 0;
+*/
 }
 
 static int rtp_read_header(AVFormatContext *s,

@@ -4,7 +4,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <log_print.h>
+#include <codec_type.h>
+#include <libavcodec/avcodec.h>
 #include "systemsetting.h"
+#include <unistd.h>
+#include "player_priv.h"
 
 int PlayerSettingIsEnable(const char* path)
 {
@@ -43,11 +47,34 @@ float PlayerGetSettingfloat(const char* path)
 #define FILTER_VFMT_VC1		(1 << 6)
 #define FILTER_VFMT_AVS		(1 << 7)
 #define FILTER_VFMT_SW		(1 << 8)
+#define FILTER_VFMT_HMVC    (1 << 9)
 
-int PlayerGetVFilterFormat()
+int PlayerGetVFilterFormat(play_para_t*am_p)
 {
+	signed short video_index = am_p->vstream_info.video_index;
 	char value[1024];
 	int filter_fmt = 0;
+	unsigned int codec_id;
+	
+	if (video_index != -1) {
+		AVStream *pStream;
+		AVCodecContext  *pCodecCtx;
+		pStream = am_p->pFormatCtx->streams[video_index];
+		pCodecCtx = pStream->codec;
+		if (am_p->stream_type == STREAM_ES && pCodecCtx->codec_tag != 0) {
+			codec_id=pCodecCtx->codec_tag;
+		}
+		else {
+			codec_id=pCodecCtx->codec_id;
+		}
+
+		if ((pCodecCtx->codec_id == CODEC_ID_H264MVC) && (!am_p->vdec_profile.hmvc_para.exist)) {
+			filter_fmt |= FILTER_VFMT_HMVC;
+		}
+		if ((pCodecCtx->codec_id == CODEC_ID_H264) && (!am_p->vdec_profile.h264_para.exist)) {
+			filter_fmt |= FILTER_VFMT_H264;
+		}
+	}
 	
     if (GetSystemSettingString("media.amplayer.disable-vcodecs", value, NULL) > 0) {
 		log_print("[%s:%d]disable_vdec=%s\n", __FUNCTION__, __LINE__, value);
@@ -78,6 +105,22 @@ int PlayerGetVFilterFormat()
 		if (strstr(value,"SW") != NULL || strstr(value,"sw") != NULL) {
 			filter_fmt |= FILTER_VFMT_SW;
 		}
+		if (strstr(value,"HMVC") != NULL || strstr(value,"hmvc") != NULL){
+			filter_fmt |= FILTER_VFMT_HMVC;
+		}
+		/*filter by codec id*/
+		if (strstr(value,"DIVX3") != NULL || strstr(value,"divx3") != NULL){
+			if (codec_id == CODEC_TAG_DIV3)
+				filter_fmt |= FILTER_VFMT_MPEG4;
+		}
+		if (strstr(value,"DIVX4") != NULL || strstr(value,"divx4") != NULL){
+			if (codec_id == CODEC_TAG_DIV4)
+				filter_fmt |= FILTER_VFMT_MPEG4;
+		}
+		if (strstr(value,"DIVX5") != NULL || strstr(value,"divx5") != NULL){
+			if (codec_id == CODEC_TAG_DIV5)
+				filter_fmt |= FILTER_VFMT_MPEG4;
+		}
     }
 	log_print("[%s:%d]filter_vfmt=%x\n", __FUNCTION__, __LINE__, filter_fmt);
     return filter_fmt;
@@ -102,13 +145,34 @@ int PlayerGetVFilterFormat()
 #define FILTER_AFMT_PCMBLU		(1 << 16)
 #define FILTER_AFMT_ALAC		(1 << 17)
 #define FILTER_AFMT_VORBIS		(1 << 18)
-
-int PlayerGetAFilterFormat()
+#define FILTER_AFMT_AAC_LATM		(1 << 19)
+#define FILTER_AFMT_APE		       (1 << 20)
+#define FILTER_AFMT_EAC3		       (1 << 21)
+int PlayerGetAFilterFormat(const char *prop)
 {
 	char value[1024];
 	int filter_fmt = 0;	
-	
-    if (GetSystemSettingString("media.amplayer.disable-acodecs", value, NULL) > 0) {
+#ifndef 	USE_ARM_AUDIO_DEC
+    /* check the dts/ac3 firmware status */
+    if(access("/system/etc/firmware/audiodsp_codec_ddp_dcv.bin",F_OK)){
+#ifndef DOLBY_DAP_EN
+		filter_fmt |= (FILTER_AFMT_AC3|FILTER_AFMT_EAC3);
+#endif
+    }
+    if(access("/system/etc/firmware/audiodsp_codec_dtshd.bin",F_OK) ){
+		filter_fmt  |= FILTER_AFMT_DTS;
+    }
+#else
+    if(access("/system/lib/libstagefright_soft_dcvdec.so",F_OK)){
+#ifndef DOLBY_DAP_EN
+	filter_fmt |= (FILTER_AFMT_AC3|FILTER_AFMT_EAC3);
+#endif
+    }
+    if(access("/system/lib/libstagefright_soft_dtshd.so",F_OK) ){
+		filter_fmt  |= FILTER_AFMT_DTS;
+    }
+#endif	
+    if (GetSystemSettingString(prop, value, NULL) > 0) {
 		log_print("[%s:%d]disable_adec=%s\n", __FUNCTION__, __LINE__, value);
 		if (strstr(value,"mpeg") != NULL || strstr(value,"MPEG") != NULL) {
 			filter_fmt |= FILTER_AFMT_MPEG;
@@ -121,7 +185,7 @@ int PlayerGetAFilterFormat()
 		} 
 		if (strstr(value,"ac3") != NULL || strstr(value,"AC#") != NULL) {
 			filter_fmt |= FILTER_AFMT_AC3;
-		} 
+		}		
 		if (strstr(value,"alaw") != NULL || strstr(value,"ALAW") != NULL) {
 			filter_fmt |= FILTER_AFMT_ALAW;
 		} 
@@ -167,6 +231,15 @@ int PlayerGetAFilterFormat()
 		if (strstr(value,"vorbis") != NULL || strstr(value,"VORBIS") != NULL) {
 			filter_fmt |= FILTER_AFMT_VORBIS;
 		}
+		if (strstr(value,"aac_latm") != NULL || strstr(value,"AAC_LATM") != NULL) {
+			filter_fmt |= FILTER_AFMT_AAC_LATM;
+		} 
+		if (strstr(value,"ape") != NULL || strstr(value,"APE") != NULL) {
+			filter_fmt |= FILTER_AFMT_APE;
+		} 		
+		if (strstr(value,"eac3") != NULL || strstr(value,"EAC3") != NULL) {
+			filter_fmt |= FILTER_AFMT_EAC3;
+		} 		
     }
 	log_print("[%s:%d]filter_afmt=%x\n", __FUNCTION__, __LINE__, filter_fmt);
     return filter_fmt;

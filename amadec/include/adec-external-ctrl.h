@@ -16,7 +16,7 @@ extern "C"
 {
 #endif
 
-    int audio_decode_init(void **handle, arm_audio_info *a_ainfo);
+    int audio_decode_init(void **handle, arm_audio_info *pcodec);
     int audio_decode_start(void *handle);
     int audio_decode_pause(void *handle);
     int audio_decode_resume(void *handle);
@@ -38,9 +38,11 @@ extern "C"
     int audio_decode_get_lrvolume(void *, float* lvol,float* rvol);	
     int audio_set_av_sync_threshold(void *, int);
     int audio_get_soundtrack(void *, int* );	
-    int audio_set_av_delay(void *, int delay);
 	int get_audio_decoder(void);
 	int get_decoder_status(void *p,struct adec_status *adec);
+    int dummy_decode_set_mute(int en);
+    int dummy_decode_set_volume(int vol);
+    int dummy_decode_get_volume(int *vol);
 
 #ifdef  __cplusplus
 }

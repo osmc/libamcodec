@@ -41,14 +41,10 @@
 #include <sys/poll.h>
 #endif
 #include <sys/time.h>
+#include "libavcodec/get_bits.h"
 
 #define RTP_TX_BUF_SIZE  (64 * 1024)
 #define RTP_RX_BUF_SIZE  (128 * 1024)
-
-typedef struct RTPContext {
-    URLContext *rtp_hd, *rtcp_hd;
-    int rtp_fd, rtcp_fd;
-} RTPContext;
 
 /**
  * If no filename is given to av_open_input_file because you want to
@@ -104,7 +100,7 @@ static void url_add_option(char *buf, int buf_size, const char *fmt, ...)
 static void build_udp_url(char *buf, int buf_size,
                           const char *hostname, int port,
                           int local_port, int ttl,
-                          int max_packet_size, int connect)
+                          int max_packet_size, int connect,int setbufsize)
 {
     ff_url_join(buf, buf_size, "udp", NULL, hostname, port, NULL);
     if (local_port >= 0)
@@ -115,6 +111,8 @@ static void build_udp_url(char *buf, int buf_size,
         url_add_option(buf, buf_size, "pkt_size=%d", max_packet_size);
     if (connect)
         url_add_option(buf, buf_size, "connect=1");
+    if(setbufsize > 0)
+    	 url_add_option(buf, buf_size, "buffer_size=655360");
 }
 
 /**
@@ -187,7 +185,7 @@ static int rtp_open(URLContext *h, const char *uri, int flags)
 
     build_udp_url(buf, sizeof(buf),
                   hostname, rtp_port, local_rtp_port, ttl, max_packet_size,
-                  connect);
+                  connect,1);
     if (ffurl_open(&s->rtp_hd, buf, flags) < 0)
         goto fail;
     if (local_rtp_port>=0 && local_rtcp_port<0)
@@ -195,7 +193,7 @@ static int rtp_open(URLContext *h, const char *uri, int flags)
 
     build_udp_url(buf, sizeof(buf),
                   hostname, rtcp_port, local_rtcp_port, ttl, max_packet_size,
-                  connect);
+                  connect,0);
     if (ffurl_open(&s->rtcp_hd, buf, flags) < 0)
         goto fail;
 
@@ -269,6 +267,36 @@ static int rtp_read(URLContext *h, uint8_t *buf, int size)
                         continue;
                     return AVERROR(EIO);
                 }
+
+                // ----------------------------------------------
+                // if payload type is mpegts,  cut off the rtp header to output
+                if(len <= 12)
+			goto BREAK_POS ;
+           
+                if((buf[1] & 0x7f) == 33 && h->priv_flags == 1)	// payload_type
+                {
+                	int offset = 12 ;
+		  	uint8_t * lpoffset = buf + 12;
+
+                	int ext = buf[0] & 0x10;
+                	if(ext > 0)
+                	{
+                		if(len < offset + 4)
+ 					goto BREAK_POS ;
+                		
+                		ext = (AV_RB16(lpoffset + 2) + 1) << 2;
+                    		if(len < ext + offset)
+					goto BREAK_POS ; 
+                    		
+                    		offset+=ext ;
+                    		lpoffset+=ext ;
+                	}
+
+			memmove(buf, lpoffset, len - offset) ;
+			len -= offset ;
+                }
+                
+BREAK_POS:                
                 break;
             }
         } else if (n < 0) {

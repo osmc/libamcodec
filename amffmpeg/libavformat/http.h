@@ -71,4 +71,6 @@ void ff_http_init_auth_state(URLContext *dest, const URLContext *src);
  */
 int ff_http_do_new_request(URLContext *h, const char *uri);
 
+int ff_http_get_broadcast_flag(URLContext *h);
+
 #endif /* AVFORMAT_HTTP_H */

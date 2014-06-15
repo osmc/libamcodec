@@ -183,12 +183,35 @@ void adts_add_header(play_para_t *para)
     int size = ADTS_HEADER_SIZE + pkt->data_size;   // 13bit valid
     size &= 0x1fff;
     buf = para->astream_info.extradata;
+    uint8_t *adts_header=NULL;
 
     if (pkt->avpkt && (pkt->avpkt->flags & AV_PKT_FLAG_AAC_WITH_ADTS_HEADER)) {
         //log_info("have add adts header in low level,don't add again\n");
         pkt->hdr->size = 0;
         return ; /*have added before */
     }
+	
+//Some aac es stream already has adts header,need check the first ADTS_HEADER_SIZE bytes
+    while (pkt->data&&pkt->data_size>=ADTS_HEADER_SIZE) {      
+        adts_header = MALLOC(ADTS_HEADER_SIZE);
+        if (adts_header) {
+            memset(adts_header,0,ADTS_HEADER_SIZE);
+            adts_header=memcpy(adts_header,pkt->data,ADTS_HEADER_SIZE);
+        }
+        else  break;
+        if(((adts_header[0]<<4)|(adts_header[1]&0xF0)>>4)!=0xFFF)//sync code
+                break;
+        if((( (*(adts_header+ 3)&0x2)<<11)|( (*(adts_header + 4)&0xFF)<<3)|( (*(adts_header + 5)&0xE0)>>5))!=pkt->data_size)//frame length
+                break;	
+        //log_info(" AAC es has adts header,don't add again\n");
+        pkt->hdr->size = 0;
+        return;
+    }
+    if(adts_header){
+        av_free(adts_header);
+        adts_header=NULL;
+    }
+	
     if (para->astream_info.extradata) {
         buf[3] = (buf[3] & 0xfc) | (size >> 11);
         buf[4] = (size >> 3) & 0xff;
@@ -315,7 +338,7 @@ static int h264_add_header(unsigned char *buf, int size,  am_packet_t *pkt)
     char* buffer = pkt->hdr->data;
 
     p = extradata;
-    if ((p[0] == 0 && p[1] == 0 && p[2] == 0 && p[3] == 1) && size < HDR_BUF_SIZE) {
+    if ((p[0] == 0 && p[1] == 0 && p[2] == 0 && p[3] == 1)||(p[0] == 0 && p[1] == 0 && p[2] == 1 ) && size < HDR_BUF_SIZE) {
         log_print("add 264 header in stream before header len=%d", size);
         MEMCPY(buffer, buf, size);
         pkt->hdr->size = size;
@@ -512,13 +535,22 @@ static int avi_write_header(play_para_t *para)
     int ret = -1;
     int index = para->vstream_info.video_index;
     am_packet_t *pkt = para->p_pkt;
-
+    AVCodecContext *avcodec;
+    
     if (-1 == index) {
         return PLAYER_ERROR_PARAM;
     }
 
     pStream = para->pFormatCtx->streams[index];
-    ret = avi_add_seqheader(pStream, pkt);
+    avcodec = pStream->codec;
+    
+    AVIStream *avi_stream = pStream->priv_data;
+    int seq_size = avi_stream->sequence_head_size;
+    if (seq_size > 0) 
+        ret = avi_add_seqheader(pStream, pkt);
+    else if(avcodec->extradata_size > 4)
+        ret = m4s2_dx50_mp4v_add_header(avcodec->extradata, avcodec->extradata_size, pkt);
+
     if (ret == PLAYER_SUCCESS) {
         if (para->vcodec) {
             pkt->codec = para->vcodec;
@@ -652,6 +684,7 @@ int mpeg_check_sequence(play_para_t *para)
     int64_t cur_offset = 0;
     AVFormatContext *s = para->pFormatCtx;
     unsigned char buf[MPEG_PROBE_SIZE];
+    if(!s->pb) return 0;
     cur_offset = avio_tell(s->pb);
     offset = 0;
     len = 0;
@@ -767,45 +800,89 @@ static int mpeg_add_header(play_para_t *para)
     pkt->avpkt_newflag = 1;
     return write_av_packet(para);
 }
-static int generate_vorbis_header(unsigned char *extra_data, unsigned size, unsigned char** vorbis_headers, unsigned *vorbis_header_sizes)
+static int generate_vorbis_header(unsigned char *extradata, unsigned extradata_size, unsigned char** header_start, unsigned *header_len)
 {
-    unsigned char *c;
-    uint32_t offset, length;
+#define RB16(x)             ((((const uint8_t*)(x))[0] << 8) | ((const uint8_t*)(x))[1])
     int i;
-
-    c = extra_data;
-    if (*c != 2) {
+    int first_header_size = 30;
+    if (extradata_size >= 6 && RB16(extradata) == first_header_size) {
+        int overall_len = 6;
+        for (i=0; i<3; i++) {
+            header_len[i] = RB16(extradata);
+            extradata += 2;
+            header_start[i] = extradata;
+            extradata += header_len[i];
+            if (overall_len > extradata_size - header_len[i])
+                return -1;
+            overall_len += header_len[i];
+        }
+    } else if (extradata_size >= 3 && extradata_size < INT_MAX - 0x1ff && extradata[0] == 2) {
+        int overall_len = 3;
+        extradata++;
+        for (i=0; i<2; i++, extradata++) {
+            header_len[i] = 0;
+            for (; overall_len < extradata_size && *extradata==0xff; extradata++) {
+                header_len[i] += 0xff;
+                overall_len   += 0xff + 1;
+            }
+            header_len[i] += *extradata;
+            overall_len   += *extradata;
+            if (overall_len > extradata_size)
+                return -1;
+        }
+        header_len[2] = extradata_size - overall_len;
+        header_start[0] = extradata;
+        header_start[1] = header_start[0] + header_len[0];
+        header_start[2] = header_start[1] + header_len[1];
+    } else {
         return -1;
     }
-
-    offset = 1;
-    for (i = 0; i < 2; i++) {
-        length = 0;
-        while (c[offset] == (unsigned char) 0xFF
-               && length < size) {
-            length += 255;
-            offset++;
-        }
-        if (offset >= (size - 1)) {
-            return -1;
-        }
-        length += c[offset];
-        offset++;
-        vorbis_header_sizes[i] = length;
-    }
-
-    vorbis_headers[0] = &c[offset];
-    vorbis_headers[1] = &c[offset + vorbis_header_sizes[0]];
-    vorbis_headers[2] = &c[offset + vorbis_header_sizes[0] + vorbis_header_sizes[1]];
-    vorbis_header_sizes[2] = size - offset - vorbis_header_sizes[0] - vorbis_header_sizes[1];
-
     return 0;
+}
+
+static void vorbis_insert_syncheader(char **hdrdata, int *size,char**vorbis_headers,int *vorbis_header_sizes)
+{
+  
+    char *pdata = (char *)MALLOC(vorbis_header_sizes[0]+vorbis_header_sizes[1]+vorbis_header_sizes[2]+24);
+    int i;
+    if (pdata==NULL) {
+         log_print("malloc %d mem failed,at func %s,line %d\n", \
+         (vorbis_header_sizes[0] + vorbis_header_sizes[1] + vorbis_header_sizes[2]), __FUNCTION__, __LINE__);
+         return PLAYER_NOMEM;
+    }
+    *hdrdata=pdata;
+    *size=vorbis_header_sizes[0] + vorbis_header_sizes[1] + vorbis_header_sizes[2]+24;
+
+    MEMCPY(pdata,"HEAD",4);
+    pdata+=4;
+    MEMCPY(pdata,&vorbis_header_sizes[0],4);
+    pdata+=4;
+    MEMCPY(pdata, vorbis_headers[0], vorbis_header_sizes[0]);
+    pdata+=vorbis_header_sizes[0];
+    log_print("[%s %d]pktnum/0  pktsize/%d\n ",__FUNCTION__,__LINE__,vorbis_header_sizes[0]);
+
+    MEMCPY(pdata,"HEAD",4);
+    pdata+=4;
+    MEMCPY(pdata,&vorbis_header_sizes[1],4);
+    pdata+=4;
+    MEMCPY(pdata, vorbis_headers[1], vorbis_header_sizes[1]);
+    pdata+=vorbis_header_sizes[1];
+    log_print("[%s %d]pktnum/1  pktsize/%d\n ",__FUNCTION__,__LINE__,vorbis_header_sizes[0]);
+
+    MEMCPY(pdata,"HEAD",4);
+    pdata+=4;
+    MEMCPY(pdata,&vorbis_header_sizes[2],4);
+    pdata+=4;
+    MEMCPY(pdata,vorbis_headers[2], vorbis_header_sizes[2]);
+    log_print("[%s %d]pktnum/2  pktsize/%d\n ",__FUNCTION__,__LINE__,vorbis_header_sizes[2]);
 }
 static int audio_add_header(play_para_t *para)
 {
     unsigned ext_size = para->pFormatCtx->streams[para->astream_info.audio_index]->codec->extradata_size;
     unsigned char *extradata = para->pFormatCtx->streams[para->astream_info.audio_index]->codec->extradata;
     am_packet_t *pkt = para->p_pkt;
+    char value[256]={0};
+    int flag=0;
     if (ext_size > 0) {
         log_print("==============audio add header =======================\n");
         if (para->astream_info.audio_format ==  AFORMAT_VORBIS) {
@@ -818,6 +895,10 @@ static int audio_add_header(play_para_t *para)
             if (pkt->hdr->data) {
                 FREE(pkt->hdr->data);
             }
+            flag =property_get("media.arm.audio.decoder",value,NULL);
+            if(flag>0 && strstr(value,"vorbis")!=NULL){
+                vorbis_insert_syncheader(&pkt->hdr->data,&pkt->hdr->size,vorbis_headers,vorbis_header_sizes);
+            }else{
             pkt->hdr->data = (char *)MALLOC(vorbis_header_sizes[0] + vorbis_header_sizes[1] + vorbis_header_sizes[2]);
             if (!pkt->hdr->data) {
                 log_print("malloc %d mem failed,at func %s,line %d\n", \
@@ -829,7 +910,7 @@ static int audio_add_header(play_para_t *para)
             MEMCPY(pkt->hdr->data + vorbis_header_sizes[0] + vorbis_header_sizes[1], \
                    vorbis_headers[2], vorbis_header_sizes[2]);
             pkt->hdr->size = (vorbis_header_sizes[0] + vorbis_header_sizes[1] + vorbis_header_sizes[2]);
-
+            }
 
         } else {
             MEMCPY(pkt->hdr->data, extradata , ext_size);
@@ -844,6 +925,7 @@ static int audio_add_header(play_para_t *para)
         if (ext_size > 4) {
             log_print("audio header first four bytes[0x%x],[0x%x],[0x%x],[0x%x]\n", extradata[0], extradata[1], extradata[2], extradata[3]);
         }
+        pkt->avpkt->stream_index=para->astream_info.audio_index;
         return write_av_packet(para);
     }
     return 0;
@@ -919,7 +1001,7 @@ int pre_header_feeding(play_para_t *para)
             if (ret != PLAYER_SUCCESS) {
                 return ret;
             }
-        } else if ((VFORMAT_H264 == para->vstream_info.video_format) || (VFORMAT_H264MVC == para->vstream_info.video_format)) {
+        } else if ((VFORMAT_H264 == para->vstream_info.video_format) || (VFORMAT_H264MVC == para->vstream_info.video_format) || (VFORMAT_H264_4K2K == para->vstream_info.video_format)) {
             ret = h264_write_header(para);
             if (ret != PLAYER_SUCCESS) {
                 return ret;

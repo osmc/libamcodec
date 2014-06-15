@@ -115,19 +115,30 @@ fail:
 int ff_raw_read_partial_packet(AVFormatContext *s, AVPacket *pkt)
 {
     int ret, size;
-
+    int off;
+    struct pts_info ptsinfo;
+    int64_t pts=AV_NOPTS_VALUE;
     size = RAW_PACKET_SIZE;
 
     if (av_new_packet(pkt, size) < 0)
         return AVERROR(ENOMEM);
-
     pkt->pos= avio_tell(s->pb);
+    ptsinfo.offsetin=pkt->pos;
+    ret=avio_getinfo(s->pb,AVCMD_GET_NEXT_PTS,0,&ptsinfo);
+    if(ret==0){
+	if(ptsinfo.offsetout==ptsinfo.offsetin){
+		pts=ptsinfo.pts;
+	}else if(((ptsinfo.offsetout-ptsinfo.offsetin)>0) && (ptsinfo.offsetout-ptsinfo.offsetin)<=size){
+		size=ptsinfo.offsetout-ptsinfo.offsetin;
+	}
+    }
     pkt->stream_index = 0;
     ret = ffio_read_partial(s->pb, pkt->data, size);
     if (ret < 0) {
         av_free_packet(pkt);
         return ret;
     }
+    pkt->pts=pts;
     pkt->size = ret;
     return ret;
 }

@@ -1767,12 +1767,12 @@ static void windowing_and_mdct_ltp(AACContext *ac, float *out,
     } else {
         memset(in, 0, 448 * sizeof(float));
         ac->dsp.vector_fmul(in + 448, in + 448, swindow_prev, 128);
-        memcpy(in + 576, in + 576, 448 * sizeof(float));
+        //memcpy(in + 576, in + 576, 448 * sizeof(float));
     }
     if (ics->window_sequence[0] != LONG_START_SEQUENCE) {
         ac->dsp.vector_fmul_reverse(in + 1024, in + 1024, lwindow, 1024);
     } else {
-        memcpy(in + 1024, in + 1024, 448 * sizeof(float));
+        //memcpy(in + 1024, in + 1024, 448 * sizeof(float));
         ac->dsp.vector_fmul_reverse(in + 1024 + 448, in + 1024 + 448, swindow, 128);
         memset(in + 1024 + 576, 0, 448 * sizeof(float));
     }
@@ -2093,7 +2093,20 @@ static int aac_decode_frame_int(AVCodecContext *avctx, void *data,
     int samples = 0, multiplier;
 
     if (show_bits(gb, 12) == 0xfff) {
-        if (parse_adts_frame_header(ac, gb) < 0) {
+
+		int esize = 7;
+		if (avctx->extradata_size <= esize) {
+				av_free(avctx->extradata);
+				avctx->extradata = av_malloc(esize + FF_INPUT_BUFFER_PADDING_SIZE);
+				if (!avctx->extradata)
+					return AVERROR(ENOMEM);
+		}
+		
+		avctx->extradata_size = esize;
+		memcpy(avctx->extradata, gb->buffer, esize);
+		memset(avctx->extradata+esize, 0, FF_INPUT_BUFFER_PADDING_SIZE);
+
+		if (parse_adts_frame_header(ac, gb) < 0) {
             av_log(avctx, AV_LOG_ERROR, "Error decoding AAC frame header.\n");
             return -1;
         }

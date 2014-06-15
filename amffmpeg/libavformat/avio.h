@@ -54,6 +54,7 @@ if user seek.
 try less read seek,for fast seek..
 */
 #define LESS_READ_SEEK	(0x1000)
+#define MORE_READ_SEEK	(0x2000) 
 
 typedef struct {
     unsigned char *buffer;  /**< Start of the buffer. */
@@ -68,6 +69,9 @@ typedef struct {
     int (*read_packet)(void *opaque, uint8_t *buf, int buf_size);
     int (*write_packet)(void *opaque, uint8_t *buf, int buf_size);
     int64_t (*seek)(void *opaque, int64_t offset, int whence);
+
+    int (*url_setcmd)(void *opaque, int cmd,int flag,unsigned long info);
+    int (*url_getinfo)(void *opaque, int cmd,int flag,void*info);	
     int64_t pos;            /**< position in the file of the current buffer */
     int must_flush;         /**< true if the next seek should flush */
     int eof_reached;        /**< true if eof reached */
@@ -102,10 +106,11 @@ typedef struct {
     int seekable;
 	int enabled_lp_buffer;
 	int support_time_seek;
-	int is_encrypted_media;
+	int is_segment_media;
 	int iscmf;
 	int flags;
 	int seekflags;
+	int local_playback;  /**local playback flag, 1 local media playback*/
 	unsigned long proppads[8];//data copyed from probed.
 } AVIOContext;
 
@@ -138,7 +143,13 @@ typedef struct URLContext {
 	int support_time_seek;
 	char *location;
 	int seekflags;
+	int is_segment_media;
+    int priv_flags;	
 } URLContext;
+
+#define FLAGS_ISCMF	1<<0 
+#define FLAGS_LOCALMEDIA  (1<<1)
+
 
 #define URL_PROTOCOL_FLAG_NESTED_SCHEME 1 /*< The protocol name can be the first part of a nested protocol scheme */
 
@@ -173,8 +184,28 @@ typedef struct URLProtocol {
 #define AVCMD_SLICE_ENDTIME                   (1000+7)
 #define AVCMD_TOTAL_DURATION			 (1000+8)
 #define AVCMD_TOTAL_NUM			        (1000+9)
+#define AVCMD_HLS_STREAMTYPE                 (1000+10)
+
+
+#define AVCMD_GET_NEXT_PTS			        (1100+1)
+
+#define AVCMD_GET_NETSTREAMINFO			(1200+1)
+
     int (*url_getinfo)(URLContext *h, int cmd,int flag,void*info);
+
+ #define AVCMD_SET_CODEC_BUFFER_INFO		(3000+1)
+    int (*url_setcmd)(URLContext *h, int cmd,int flag,unsigned long info);
 } URLProtocol;
+/*
+for AVCMD_GET_PTS cmd;info.=struct pts_info
+*/
+struct pts_info
+{
+	int64_t offsetin;
+	int64_t offsetout;
+	int64_t pts; //AV_TIME_BASE/s
+};
+
 
 typedef struct URLPollEntry {
     URLContext *handle;
@@ -198,6 +229,9 @@ attribute_deprecated int url_poll(URLPollEntry *poll_table, int n, int timeout);
 
 #define URL_MINI_BUFFER	0x20000000
 #define URL_NO_LP_BUFFER	0x40000000
+
+
+#define URL_SEGMENT_MEDIA  0x2000
 
 /**
  * @}
@@ -491,7 +525,10 @@ int avio_put_str16le(AVIOContext *s, const char *str);
 #define AVSEEK_FULLTIME 		0x50000
 
 #define AVSEEK_SLICE_BYINDEX	(0x80000+1)	
-#define AVSEEK_SLICE_BYTIME	(0x80000+2)	
+#define AVSEEK_SLICE_BYTIME	(0x80000+2)
+#define AVSEEK_ITEM_TIME            (0x80000+3)
+#define AVSEEK_CMF_TS_TIME       (0x80000+4)
+#define AVSEEK_CURL_HTTP_KEEPALIVE	(0x80000+5)
 
 
 int64_t avio_seek(AVIOContext *s, int64_t offset, int whence);
@@ -712,6 +749,7 @@ static inline int url_support_time_seek(AVIOContext *s)
 	URLContext *h;	
 	if (!s)
 		return 0;
+#if 0
 	if(!s->support_time_seek && s->opaque){
 		h = (URLContext *)s->opaque;
 		if(h && h->support_time_seek){
@@ -719,11 +757,30 @@ static inline int url_support_time_seek(AVIOContext *s)
 			av_log(NULL, AV_LOG_INFO, "[url_support_time_seek]for h->support_time_seek, so s->support_time_seek = 1\n");
 		}
 	}
+#endif
 	return s->support_time_seek;
+}
+
+static inline int url_is_segment_media(AVIOContext *s)
+{
+	URLContext *h;	
+	if (!s)
+		return 0;
+
+	if(!s->is_segment_media&& s->opaque){
+		h = (URLContext *)s->opaque;
+		if(h && h->is_segment_media){
+			s->is_segment_media = 1;
+			av_log(NULL,AV_LOG_INFO,"Get segment media flag,will use discontinue policy\n");
+		}
+	}
+
+	return s->is_segment_media;	
 }
  int64_t url_fseektotime(AVIOContext *s,int totime_s,int flags);
  int url_buffering_data(AVIOContext *s,int size);
  int64_t url_ffulltime(ByteIOContext *s);
+ int64_t url_fseekitemtime(AVIOContext *s, int64_t pos);
  int64_t url_buffed_pos(ByteIOContext *s);
  int64_t url_fbuffered_time(ByteIOContext *s);
  int64_t url_fseekslicebytime(AVIOContext *s,int64_t timestamp, int flags);
@@ -735,7 +792,10 @@ int url_lp_clear_seekflags(URLContext *s,int seekflagmask);
 
 int url_start_user_seek(AVIOContext *s);
 int url_finished_user_seek(AVIOContext *s);
-
+int url_set_more_data_seek(AVIOContext *s);
+int url_clear_more_data_seek(AVIOContext *s);
+int url_setcmd(AVIOContext *s, int cmd,int flag,unsigned long info);
+int avio_getinfo(AVIOContext *s, int cmd,int flag,void*info);
 #include "libavformat/url.h"
 #include "libavformat/aviolpbuf.h"
 

@@ -68,7 +68,7 @@ int player_thread_create(play_para_t *player)
         return ret;
     }
     log_print("[player_thread_create:%d]creat thread success,tid=%lu\n", __LINE__, tid);
-
+    //pthread_setname_np(tid,"AmplayerMain");
     mgt->pthread_id = tid;
     return PLAYER_SUCCESS;
 

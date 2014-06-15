@@ -275,7 +275,7 @@ int iec958buf_fill_zero()
 	@return 0:means 958 hw buffer maybe underrun,may need fill zero data 
 	@return 1:means 958 hw buffer level is fine 
 */
-#define IEC958_LEVEL_THREAD  4096*2
+#define IEC958_LEVEL_THREAD  4096
 int iec958_check_958buf_level()
 {
 	int status_958 = 0;

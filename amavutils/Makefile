@@ -1,6 +1,6 @@
 TARGET = libamavutils.so
 
-TARGET_OBJS  = am_itemlist.c
+TARGET_OBJS=amaudioutils.o amconfigutils.o amdisplayutils.o ammodule.o amsysfsutils.o Amvideoutils.o itemlist.o\
 
 LDFLAGS += -shared -lm -lrt
 
@@ -8,7 +8,7 @@ TARGET_DIR=$(shell pwd)/../../../target
 STAGING_DIR=$(shell pwd)/../../../staging
 
 CFLAGS+=-O2
-CFLAGS+=-I$(shell pwd) -I$(shell pwd)/include -I${STAGING_DIR}/include -I${STAGING_DIR}/usr/include -L${TARGET_DIR}/lib -L${TARGET_DIR}/usr/lib
+CFLAGS+=-I$(shell pwd) -I$(shell pwd)/include -I$(shell pwd)/../amcodec/include -I${STAGING_DIR}/include -I${STAGING_DIR}/usr/include -L${TARGET_DIR}/lib -L${TARGET_DIR}/usr/lib
 
 export CC CFLAGS
 

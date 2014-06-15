@@ -39,7 +39,8 @@ typedef enum
     APE_FILE		= 19,        
     AMR_FILE        = 20,
     AVS_FILE		= 21, 
-    FILE_MAX		= 22,        
+    PMP_FILE		= 22, 
+    FILE_MAX		= 23,        
 }pfile_type;
 
 #endif

@@ -641,6 +641,9 @@ static int64_t mpegps_read_dts(AVFormatContext *s, int stream_index,
         return AV_NOPTS_VALUE;
 
     for(;;) {
+		if(url_interrupt_cb())
+			return AV_NOPTS_VALUE;
+		
         len = mpegps_read_pes_header(s, &pos, &startcode, &pts, &dts);
         if (len < 0) {
             av_dlog(s, "none (ret=%d)\n", len);

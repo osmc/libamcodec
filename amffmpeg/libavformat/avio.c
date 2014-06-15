@@ -29,7 +29,8 @@
 #include "network.h"
 #endif
 #include "url.h"
-#include <am_itemlist.h>
+#include "itemlist.h"
+#include "amconfigutils.h"
 /** @name Logging context. */
 /*@{*/
 static const char *urlcontext_to_name(void *ptr)
@@ -295,7 +296,16 @@ int ffurl_alloc(URLContext **puc, const char *filename, int flags)
 
 int ffurl_open(URLContext **puc, const char *filename, int flags)
 {
-    int ret = ffurl_alloc(puc, filename, flags);
+	int ret;
+	if(am_getconfig_bool("media.libplayer.curlenable") && (!strncmp(filename, "http", strlen("http")) || !strncmp(filename, "shttp", strlen("shttp")))) {
+		char * file = (char *)av_malloc(strlen(filename) + 10);
+		int num = snprintf(file, strlen(filename) + 10, "curl:%s", filename);
+		ret = ffurl_alloc(puc, file, flags);
+		av_free(file);
+		file = NULL;
+	} else {
+		ret = ffurl_alloc(puc, filename, flags);
+	}
     if (ret)
         return ret;
     ret = ffurl_connect(*puc);
@@ -305,21 +315,37 @@ int ffurl_open(URLContext **puc, const char *filename, int flags)
     *puc = NULL;
     return ret;
 }
-int ffurl_open_h(URLContext **puc, const char *filename, int flags,const char *headers, int * http_404_flag)
+int ffurl_open_h(URLContext **puc, const char *filename, int flags,const char *headers, int * http_error_flag)
 {
-    int ret = ffurl_alloc(puc, filename, flags);
+	int ret;
+	if(am_getconfig_bool("media.libplayer.curlenable")  && (!strncmp(filename, "http", strlen("http")) || !strncmp(filename, "shttp", strlen("shttp")))) {
+		char * file = (char *)av_malloc(strlen(filename) + 10);
+		int num = snprintf(file, strlen(filename) + 10, "curl:%s", filename);
+		ret = ffurl_alloc(puc, file, flags);
+		av_free(file);
+		file = NULL;
+	} else {
+		ret = ffurl_alloc(puc, filename, flags);
+	}
     if (ret)
         return ret;
 	if(headers){
 		(*puc)->headers=av_strdup(headers);
 	}
+    if(flags&URL_SEGMENT_MEDIA){	 
+        (*puc)->is_segment_media = 1;
+    }else{       
+	 (*puc)->is_segment_media = 0;
+    }
     ret = ffurl_connect(*puc);
-    if(http_404_flag) {
-        *http_404_flag = 0;
+    if(http_error_flag) {
+        *http_error_flag = 0;
         if(404 == (*puc)->http_code)
-            *http_404_flag = 1;
+            *http_error_flag = -404;
         if(503 == (*puc)->http_code)
-            *http_404_flag = 2;
+            *http_error_flag = -503;
+        if(500 == (*puc)->http_code)
+            *http_error_flag = -500;
     }
     if (!ret)
         return 0;
@@ -334,30 +360,27 @@ static inline int retry_transfer_wrapper(URLContext *h, unsigned char *buf, int 
                                          int (*transfer_func)(URLContext *h, unsigned char *buf, int size))
 {
     int ret, len;
-    int fast_retries = 10;
-
+    int64_t timeouttime = av_gettime()+10*(1000*1000);/*10*1S.*/
+    int retry=0;
     len = 0;
     while (len < size_min) {
-        ret = transfer_func(h, buf+len, size-len);
+        ret = transfer_func(h, buf+len, size-len);/*low level retry 1S*/
+        if (url_interrupt_cb())
+            return AVERROR_EXIT;
         if (ret == AVERROR(EINTR))
             continue;
         if (h->flags & AVIO_FLAG_NONBLOCK)
             return ret;
-        if (ret == AVERROR(EAGAIN)) {            
-            if (fast_retries){
-				ret = 0;
-                fast_retries--;
-				usleep(1000);  
-			} else {                          	
-				return ret;
-            }
-			av_log(NULL,AV_LOG_INFO,"**read/write time out,retry=%d\n",fast_retries);
-        } else if (ret < 1)
+        if (ret == AVERROR(EAGAIN)) { 
+			if(av_gettime()>=timeouttime)
+				return AVERROR(EAGAIN);
+			//av_log(NULL,AV_LOG_INFO,"retry_transfer_wrapper,retry=%d\n",retry++);
+        } else if (ret < 1){
             return ret < 0 ? ret : len;
-        if (ret)
-           fast_retries = FFMAX(fast_retries, 2);
-        len += ret;
-        if (/*len < size && fast_retries<8 &&*/ url_interrupt_cb()) /*at least try several times for some teardown cmd finished.*/
+        }else{
+        	len+=ret;
+        }
+        if (url_interrupt_cb()) /*at least try several times for some teardown cmd finished.*/
             return AVERROR_EXIT;
     }
     return len;
@@ -373,7 +396,8 @@ int ffurl_read(URLContext *h, unsigned char *buf, int size)
 
 int ffurl_read_complete(URLContext *h, unsigned char *buf, int size)
 {
-    int maxretry=10;
+#define MAX_RETRY (6*60) //10S*6*60=60MIN;
+    int maxretry=MAX_RETRY;
     int toread=size;
     int readedlen=0;
     if (!(h->flags & AVIO_FLAG_READ))
@@ -384,14 +408,16 @@ int ffurl_read_complete(URLContext *h, unsigned char *buf, int size)
 		if(ret>0){
 			toread-=ret;
 			readedlen+=ret;
+		}else if(ret!=AVERROR(EAGAIN)){
+			return ret;/*error of EOF*/
 		}
-		if(maxretry<=8  && url_interrupt_cb())
+		if(url_interrupt_cb())
 			return AVERROR_EXIT;
     }
     if((size-toread)!=0)
 		return (size-toread);
  	else
-		return AVERROR(EAGAIN);
+		return AVERROR(ETIMEDOUT);/*retry too long time,//time out...*/
 }
 
 int ffurl_write(URLContext *h, const unsigned char *buf, int size)

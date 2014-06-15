@@ -157,6 +157,8 @@ void av_log_set_callback(void (*)(void*, int, const char*, va_list));
 void av_log_default_callback(void* ptr, int level, const char* fmt, va_list vl);
 const char* av_default_item_name(void* ctx);
 
+int av_tag_log(const char * tag,const char *fmt, ...);
+
 /**
  * av_dlog macros
  * Useful to print debug messages that shouldn't get compiled in normally.

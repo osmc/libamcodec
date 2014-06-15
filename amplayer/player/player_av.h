@@ -44,6 +44,7 @@ typedef struct am_packet {
     AVPacket bak_spkt;
 } am_packet_t;
 
+
 aformat_t audio_type_convert(enum CodecID id, pfile_type File_type);
 vformat_t video_type_convert(enum CodecID id);
 vdec_type_t video_codec_type_convert(unsigned int id);
@@ -67,9 +68,10 @@ int set_cntl_syncthresh(play_para_t *para);
 void player_switch_audio(play_para_t *para);
 void player_switch_sub(play_para_t *para);
 int get_cntl_state(am_packet_t *pkt);
-int time_search(struct play_para *para);
+int time_search(struct play_para *para,int flags);
 int player_reset(play_para_t *p_para);
 int	check_avbuffer_enough(play_para_t *para);
+
 
 #ifdef DEBUG_VARIABLE_DUR
 int update_variable_info(play_para_t *para);

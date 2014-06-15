@@ -2,6 +2,9 @@
 #ifndef __AML_RESAMPLE_H__
 #define __AML_RESAMPLE_H__
 
+#include <audio-dec.h>
+#include <adec-pts-mgt.h>
+#include <audiodsp_update_format.h>
 #define Q14(ratio)          ((ratio)*(1<<14))
 #define Q14_INT_GET(value)  ((value)>>14)
 #define Q14_FRA_GET(value)  ((value)&0x3fff)
@@ -26,11 +29,12 @@ typedef struct af_resampe_ctl_s{
   short OutSampReserveBuf[MAX_NUMSAMPS_PERCH*DEFALT_NUMCH];
   short OutSampReserveLen;
   short InitFlag;
+  short LastResamType;
 }af_resampe_ctl_t;
 
 void af_resample_linear_init();
 
-int af_get_reample_enable_flag();
+int af_get_resample_enable_flag();
 
 af_resampe_ctl_t* af_resampler_ctx_get();
 
@@ -49,6 +53,9 @@ int af_get_delta_inputsampnum(af_resampe_ctl_t *paf_resampe_ctl,int Nch);
 
 void  af_get_unpro_inputsampnum(af_resampe_ctl_t *paf_resampe_ctl,short *buf, int *num);
 
+void af_resample_api_normal(char *buffer, unsigned int *size,int Chnum, aml_audio_dec_t *audec);
+
+void af_resample_api(char* buffer, unsigned int * size, int Chnum, aml_audio_dec_t* audec, int enable, int delta);
 
 #endif
 

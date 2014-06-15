@@ -449,6 +449,7 @@ OBJS-$(CONFIG_ZMBV_ENCODER)            += zmbvenc.o
 OBJS-$(CONFIG_PCM_ALAW_DECODER)           += pcm.o
 OBJS-$(CONFIG_PCM_ALAW_ENCODER)           += pcm.o
 OBJS-$(CONFIG_PCM_BLURAY_DECODER)         += pcm-mpeg.o
+OBJS-$(CONFIG_PCM_WIFIDISPLAY_DECODER)    += pcm-wifi-display.o
 OBJS-$(CONFIG_PCM_DVD_DECODER)            += pcm.o
 OBJS-$(CONFIG_PCM_DVD_ENCODER)            += pcm.o
 OBJS-$(CONFIG_PCM_F32BE_DECODER)          += pcm.o
@@ -691,7 +692,7 @@ HOSTPROGS = aac_tablegen aacps_tablegen cbrt_tablegen cos_tablegen      \
 
 DIRS = alpha arm bfin mlib ppc ps2 sh4 sparc x86
 
-#include $(LOCAL_PATH)/$(ARCH)/Makefile
+include $(shell pwd)/libavcodec/$(ARCH)/Makefile
 
 CLEANFILES = *_tables.c *_tables.h *_tablegen$(HOSTEXESUF)
 

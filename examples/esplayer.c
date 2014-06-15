@@ -145,7 +145,7 @@ int main(int argc,char *argv[])
     struct buf_status vbuf;
 
     if (argc < 6) {
-        printf("Corret command: cplay <filename> <width> <height> <fps> <format(1:mpeg4 2:h264)> [subformat for mpeg4]\n");
+        printf("Corret command: esplayer <filename> <width> <height> <fps> <format(1:mpeg4 2:h264)> [subformat for mpeg4]\n");
         return -1;
     }
     osd_blank("/sys/class/graphics/fb0/blank",1);

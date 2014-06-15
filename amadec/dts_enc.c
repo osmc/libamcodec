@@ -7,6 +7,7 @@
 #include <pthread.h>
 #include "dts_enc.h"
 #include "dts_transenc_api.h"
+#include <cutils/properties.h>
 typedef enum {
     IDLE,
     TERMINATED,
@@ -32,15 +33,9 @@ static void *dts_enc_loop();
 
 static int get_dts_mode(void)
 {
-    int fd;
     int val = 0;
     char  bcmd[28];
-    fd = open(DIGITAL_RAW_PATH, O_RDONLY);
-    if (fd >= 0) {
-        read(fd, &bcmd, 28);
-        //val = strtol(bcmd, NULL, 1);
-        close(fd);
-    }
+    amsysfs_get_sysfs_str(DIGITAL_RAW_PATH, bcmd, 28);
     val=bcmd[21]&0xf;
     return val;
     
@@ -48,35 +43,34 @@ static int get_dts_mode(void)
 
 static int get_dts_format(void)
 {
-    int fd;
     char format[21];
     int len;
 
     format[0] = 0;
 
-    fd = open(FORMAT_PATH, O_RDONLY);
-    if (fd < 0) {
-        adec_print("amadec device not found");
-        return 0;
-    }
-    len = read(fd, format, 20);
-    if (len > 0) {
-        format[len] = 0;
-    }
+    amsysfs_get_sysfs_str(FORMAT_PATH, format, 21);
     if (strncmp(format, "NA", 2) == 0) {
-        close(fd);
         return 0;
     }
     adec_print("amadec format: %s", format);
     if (strncmp(format, "amadec_dts", 10) == 0) {
-        close(fd);
         return 1;
     }
     return 0;
 }
 
+static int get_cpu_type(void)
+{
+    char value[PROPERTY_VALUE_MAX];
+    int ret = property_get("ro.board.platform",value,NULL);
+    adec_print("ro.board.platform = %s\n", value);
+    if (ret>0 && match_types("meson6",value))
+    	return 1;
+    return 0;
+}
 int dtsenc_init()
 {
+    return 0;
     int ret;
     memset(&dtsenc_info,0,sizeof(dtsenc_info_t));
     dtsenc_info.dts_flag = get_dts_format();
@@ -86,6 +80,9 @@ int dtsenc_init()
     //dtsenc_info.raw_mode=1;//default open
     if(!dtsenc_info.raw_mode)
         return -1;
+    if(!get_cpu_type()) //if cpu !=m6 ,skip
+        return -1;
+    
    //adec_print("====dts_flag:%d raw_mode:%d \n",dtsenc_info.dts_flag,dtsenc_info.raw_mode);
     
     ret=dts_transenc_init();
@@ -102,12 +99,14 @@ int dtsenc_init()
            dtsenc_release();
            return -1;
        }
+	pthread_setname_np(tid,"AmadecDtsEncLP");	
        dtsenc_info.thread_pid = tid;
     adec_print("====dts_enc init success \n");
     return 0;
 }
 int dtsenc_start()
 {
+    return 0;
     int ret;
     if(dtsenc_info.state!=INITTED)
            return -1;
@@ -117,18 +116,21 @@ int dtsenc_start()
 }
 int dtsenc_pause()
 {
+    return 0;
     if(dtsenc_info.state==ACTIVE)
         dtsenc_info.state=PAUSED;
     return 0;
 }
 int dtsenc_resume()
 {
+    return 0;
     if(dtsenc_info.state==PAUSED)
         dtsenc_info.state=ACTIVE;
     return 0;
 }
 int dtsenc_stop()
 {
+    return 0;
     if(dtsenc_info.state<INITTED)
            return -1;
     dtsenc_info.state=STOPPED;
@@ -145,6 +147,7 @@ int dtsenc_stop()
 }
 int dtsenc_release()
 {
+    return 0;
     memset(&dtsenc_info,0,sizeof(dtsenc_info_t));
     // dtsenc_info.state=TERMINATED;
      adec_print("====dts_enc release ok\n");
@@ -153,6 +156,7 @@ int dtsenc_release()
 
 static void *dts_enc_loop()
 {
+    return 0;
     int ret;
     while(1)
     {

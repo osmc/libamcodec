@@ -40,6 +40,7 @@
 #define CODEC_CNTL_DEVICE           "/dev/amvideo"
 #define CODEC_SUB_DEVICE            "/dev/amstream_sub"
 #define CODEC_SUB_READ_DEVICE       "/dev/amstream_sub_read"
+#define CODEC_AUDIO_UTILS_DEVICE    "/dev/amaudio_utils"
 
 CODEC_HANDLE codec_h_open(const char *port_addr, int flags);
 int codec_h_close(CODEC_HANDLE h);

@@ -130,6 +130,8 @@ int  pcmenc_get_pcm_info(pcm51_encoded_info_t *info)
 	ret = ioctl(dev_fd, AUDIODSP_PCMENC_GET_PCMINFO,info);	
 	if(ret)
 		return ret;
+ 	adec_print("InfoValidFlag %d,SampFs %d,NumCh %d,AcMode %d,LFEFlag %d,BitsPerSamp %d \n", \
+	info->InfoValidFlag,info->SampFs,info->NumCh,info->AcMode,info->LFEFlag,info->BitsPerSamp);	
 	return 0;
 	
 }

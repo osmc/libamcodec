@@ -29,7 +29,7 @@ static int stream_ps_init(play_para_t *p_para)
         codec->has_video = 1;
         codec->video_type = vinfo->video_format;
         codec->video_pid = vinfo->video_pid;
-        if ((codec->video_type == VFORMAT_H264) || (codec->video_type == VFORMAT_H264MVC)) {
+        if ((codec->video_type == VFORMAT_H264) || (codec->video_type == VFORMAT_H264MVC) || (codec->video_type == VFORMAT_H264_4K2K)) {
             codec->am_sysinfo.format = vinfo->video_codec_type;
         }
         if (codec->video_type == VFORMAT_VC1) {
@@ -49,6 +49,7 @@ static int stream_ps_init(play_para_t *p_para)
         codec->audio_channels = ainfo->audio_channel;
         codec->audio_samplerate = ainfo->audio_samplerate;
         codec->avsync_threshold = p_para->start_param->avsync_threshold;
+		codec->switch_audio_flag = 0;
 
         /*if ((codec->audio_type == AFORMAT_ADPCM) ||
             (codec->audio_type == AFORMAT_WMA) ||
@@ -78,6 +79,11 @@ static int stream_ps_init(play_para_t *p_para)
             }
             codec->audio_info.valid = 1;
         }
+		pCodecCtx = p_para->pFormatCtx->streams[p_para->astream_info.audio_index]->codec;		
+		if(IS_AUDIO_NOT_SUPPORTED_BY_AUDIODSP(codec->audio_type,pCodecCtx)){
+				codec->dspdec_not_supported = 1;
+				log_print("main profile aac not supported by dsp decoder,so set dspdec_not_supported flag\n");
+		}		
         log_print("[%s:%d]audio bitrate=%d sample_rate=%d channels=%d codec_id=%x block_align=%d,extra size\n",
                   __FUNCTION__, __LINE__, codec->audio_info.bitrate, codec->audio_info.sample_rate, codec->audio_info.channels,
                   codec->audio_info.codec_id, codec->audio_info.block_align, codec->audio_info.extradata_size);

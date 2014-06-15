@@ -75,6 +75,15 @@ static int global_level = 5;
 
 int update_loglevel_setting(void)
 {
+
+    char *arg;
+    arg = getenv ("AMPLAYER_LOGLEVEL");
+    if (arg)
+        global_level = atoi (arg);
+    if (global_level < 0 || global_level > 90)
+        global_level = 50;
+    av_log_set_level(global_level);//for ffmpeg
+    printf("amplayer logprint level %d\n", global_level);
     return 0;
 }
 

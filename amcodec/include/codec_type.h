@@ -52,10 +52,22 @@ typedef struct {
     char extradata[AUDIO_EXTRA_DATA_SIZE];;   ///< extra data information for decoder
 } audio_info_t;
 
+ typedef struct {
+    int valid;               ///< audio extradata valid(1) or invalid(0), set by dsp
+    int sample_rate;         ///< audio stream sample rate
+    int channels;            ///< audio stream channels
+    int bitrate;             ///< audio stream bit rate
+    int codec_id;            ///< codec format id
+    int block_align;         ///< audio block align from ffmpeg
+    int extradata_size;      ///< extra data size
+    char extradata[512];;   ///< extra data information for decoder
+} Asf_audio_info_t;
+
 typedef struct {
     CODEC_HANDLE handle;        ///< codec device handler
     CODEC_HANDLE cntl_handle;   ///< video control device handler
     CODEC_HANDLE sub_handle;    ///< subtile device handler
+    CODEC_HANDLE audio_utils_handle;  ///< audio utils handler
     stream_type_t stream_type;  ///< stream type(es, ps, rm, ts)
 unsigned int has_video:
     1;                          ///< stream has video(1) or not(0)
@@ -82,6 +94,7 @@ unsigned int noblock:
     void * adec_priv;          ///<for adec>
     int SessionID;
 	int dspdec_not_supported;//check some profile that audiodsp decoder can not support,we switch to arm decoder
+	int switch_audio_flag;		//<switch audio flag switching(1) else(0)
 } codec_para_t;
 
 typedef struct 
@@ -103,11 +116,15 @@ typedef struct {
     int sample_rate;         ///< audio stream sample rate
     int channels;            ///< audio stream channels
     int format;            ///< codec format id
+    int bitrate;
+    int block_align;
+    int codec_id;         //original codecid corespingding to ffmepg
     int handle;        ///< codec device handler
     int extradata_size;      ///< extra data size
     char extradata[AUDIO_EXTRA_DATA_SIZE];
 	int SessionID;
 	int dspdec_not_supported;//check some profile that audiodsp decoder can not support,we switch to arm decoder	
+	int droppcm_flag;				// drop pcm flag, if switch audio (1)
 } arm_audio_info;
 
 //audio decoder type, default arc

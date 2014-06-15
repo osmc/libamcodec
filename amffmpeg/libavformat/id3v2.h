@@ -44,7 +44,11 @@ enum ID3v2Encoding {
     ID3v2_ENCODING_UTF16BE  = 2,
     ID3v2_ENCODING_UTF8     = 3,
 };
-
+typedef struct ID3v2ExtraMeta {
+    const char *tag;
+    void *data;
+    struct ID3v2ExtraMeta *next;
+} ID3v2ExtraMeta;
 /**
  * Detect ID3v2 Header.
  * @param buf   must be ID3v2_HEADER_SIZE byte long

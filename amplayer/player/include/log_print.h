@@ -20,7 +20,7 @@ void log_lprint(const int level, const char *fmt, ...);
 #define AM_LOG_TRACE 	90
 
 
-#define log_print(fmt...) 	log_lprint(0,##fmt)
+#define log_print(fmt...) 	log_lprint(AM_LOG_INFO,##fmt)
 #define log_error(fmt...) 	log_lprint(AM_LOG_ERROR,##fmt)
 #define log_warning(fmt...) log_lprint(AM_LOG_WARNING,##fmt)
 #define log_info(fmt...) 	log_lprint(AM_LOG_INFO,##fmt)

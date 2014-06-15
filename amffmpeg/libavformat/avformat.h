@@ -648,6 +648,8 @@ typedef struct AVStream {
      float special_fps;  // for some special stream
      int rotation_degree;
     int encrypt;
+     int no_program;
+    int stream_valid;
 } AVStream;
 
 #define AV_PROGRAM_RUNNING 1
@@ -681,7 +683,7 @@ typedef struct AVChapter {
     AVDictionary *metadata;
 } AVChapter;
 
-#define MAX_STREAMS 30
+#define MAX_STREAMS 40
 
 /**
  * Format I/O context.
@@ -697,6 +699,7 @@ typedef struct AVFormatContext {
     struct AVOutputFormat *oformat;
     void *priv_data;
     AVIOContext *pb;
+    AVProbeData pd;
     unsigned int nb_streams;
     AVStream **streams;
     char filename[1024]; /**< input or output filename */
@@ -774,6 +777,10 @@ typedef struct AVFormatContext {
 #define AVFMT_FLAG_KEEP_SIDE_DATA 0x40000 ///< Dont merge side data but keep it seperate.
 
 #define AVFMT_FLAG_FILESIZE_NOT_VALID 0x100000 ///< Dont use filesize calculate duration/bitrate.because file size always changed.
+
+#define AVFMT_FLAG_DRMLEVEL1 0x200000 ///< Set Drm Level ;
+
+#define AVFMT_FLAG_PR_TVP 0x400000 ///< Playready TVP ;
 
     int loop_input;
 
@@ -888,6 +895,7 @@ typedef struct AVFormatContext {
     /* added by Z.C for some ps/ts file seeking */
     int64_t valid_offset;
     int valid_offset_done;
+    char is_vbr;
 
     /* added by Z.C for avi or some other files seekable */
     int seekable;
@@ -1366,6 +1374,8 @@ void av_close_input_file(AVFormatContext *s);
  */
 void avformat_free_context(AVFormatContext *s);
 
+void av_delete_stream(AVFormatContext *s, int id);
+void av_free_stream(AVFormatContext *s, AVStream *st);
 /**
  * Add a new stream to a media file.
  *

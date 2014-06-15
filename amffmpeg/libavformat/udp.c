@@ -188,7 +188,7 @@ static int udp_set_url(struct sockaddr_storage *addr,
     struct addrinfo *res0;
     int addr_len;
     int family = AF_UNSPEC;
-    if(am_getconfig_bool("media.libplayer.ipv4only"))	
+    if(am_getconfig_bool_def("media.libplayer.ipv4only",1))	
 		family = AF_INET;
     res0 = udp_resolve_host(hostname, port, SOCK_DGRAM, family, 0);
     if (res0 == 0) return AVERROR(EIO);
@@ -205,7 +205,7 @@ static int udp_socket_create(UDPContext *s,
     int udp_fd = -1;
     struct addrinfo *res0 = NULL, *res = NULL;
     int family = AF_UNSPEC;
-    if(am_getconfig_bool("media.libplayer.ipv4only"))	
+    if(am_getconfig_bool_def("media.libplayer.ipv4only",1))	
 		family = AF_INET;
     if (((struct sockaddr *) &s->dest_addr)->sa_family)
         family = ((struct sockaddr *) &s->dest_addr)->sa_family;

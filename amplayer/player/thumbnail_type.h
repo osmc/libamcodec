@@ -33,6 +33,7 @@ typedef struct video_frame {
     rational displayAspectRatio;
     int DataSize;
     char *data;
+	int maxframesize;
 }video_frame_t;
 
 #endif

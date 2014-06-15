@@ -43,7 +43,7 @@ CFLAGS=$(DIRS:%/=-I$(SRC)/%/include)
 DIRS  = player/
 DIRS += player/system/
 
-CFLAGS+=-I${SRCTREE}/../amffmpeg -I${SRCTREE}/../amcodec/include -I${SRCTREE}/../amadec/include -I${SRCTREE}/../amavutils/include
+CFLAGS+=-I${SRCTREE}/player -I${SRCTREE}/../amffmpeg -I${SRCTREE}/../amcodec/include -I${SRCTREE}/../amadec/include -I${SRCTREE}/../amavutils/include
 CFLAGS+=-fPIC -DENABLE_FREE_SCALE
 target_all=  $(TARGET)
 
@@ -83,6 +83,7 @@ clean:$(CLRDIR)
 	rm -rf $(target_all)
 
 install:$(target_all)
-	-install  $(INSTALL_FLAGS)	$(target_all)  $(INSTALL_DIR)
-	-install  $(INSTALL_FLAGS) $(DIRS:%/=$(SRC)/%/include/*)  $(PREFIX)/include/amplayer
-	
+	-install $(INSTALL_FLAGS)	$(target_all)  $(INSTALL_DIR)
+	mkdir -p $(PREFIX)/include/amplayer
+	-install $(INSTALL_FLAGS) $(DIRS:%/=$(SRC)/%/include/*)  $(PREFIX)/include/amplayer
+

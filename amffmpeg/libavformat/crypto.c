@@ -63,7 +63,7 @@ static int crypto_open(URLContext *h, const char *uri, int flags)
     const char *nested_url;
     int ret;
     CryptoContext *c = h->priv_data;
-
+    int reason_code = 0;
     if (!av_strstart(uri, "crypto+", &nested_url) &&
         !av_strstart(uri, "crypto:", &nested_url)) {
         av_log(h, AV_LOG_ERROR, "Unsupported url %s\n", uri);
@@ -81,8 +81,8 @@ static int crypto_open(URLContext *h, const char *uri, int flags)
         ret = AVERROR(ENOSYS);
         goto err;
     }
-    if ((ret = ffurl_open(&c->hd, nested_url, AVIO_FLAG_READ)) < 0) {
-        av_log(h, AV_LOG_ERROR, "Unable to open input\n");
+    if ((ret = ffurl_open_h(&c->hd, nested_url, flags|AVIO_FLAG_READ,h->headers,&reason_code)) < 0) {
+        av_log(h, AV_LOG_ERROR, "Unable to open input,reason:%d\n",reason_code);
         goto err;
     }
     c->aes = av_mallocz(av_aes_size);
@@ -94,11 +94,12 @@ static int crypto_open(URLContext *h, const char *uri, int flags)
     av_aes_init(c->aes, c->key, 128, 1);
 
     h->is_streamed = 1;
-
+    h->http_code = reason_code;
     return 0;
 err:
     av_freep(&c->key);
     av_freep(&c->iv);
+    h->http_code = reason_code;
     return ret;
 }
 
@@ -118,7 +119,7 @@ retry:
     // since we'll remove PKCS7 padding at the end. So make
     // sure we've got at least 2 blocks, so we can decrypt
     // at least one.
-    while (c->indata - c->indata_used < 2*BLOCKSIZE) {
+    while ((c->indata - c->indata_used < 2*BLOCKSIZE)&&c->eof<1) {
         int n = ffurl_read(c->hd, c->inbuffer + c->indata,
                            sizeof(c->inbuffer) - c->indata);
         if (n <= 0) {
@@ -162,10 +163,23 @@ static int crypto_close(URLContext *h)
     return 0;
 }
 
+static int64_t crypto_seek(URLContext *h, int64_t off, int whence){
+    CryptoContext *c = h->priv_data;
+    
+    if (c->hd){
+        if((whence ==SEEK_CUR&&off>=0)||whence == SEEK_END){
+            c->indata = c->indata_used =c->outdata = 0;
+        }
+        return ffurl_seek(c->hd,off,whence); 
+    }else{
+        return -1;
+    }
+}
 URLProtocol ff_crypto_protocol = {
     .name            = "crypto",
     .url_open        = crypto_open,
     .url_read        = crypto_read,
+    .url_seek        = crypto_seek,
     .url_close       = crypto_close,
     .priv_data_size  = sizeof(CryptoContext),
     .priv_data_class = &crypto_class,

@@ -16,14 +16,16 @@
 #include <sys/soundcard.h>
 //#include <config.h>
 #include <alsa/asoundlib.h>
-
+#include <alsa/pcm.h>
 #include <audio-dec.h>
 #include <adec-pts-mgt.h>
 #include <log-print.h>
 #include <alsa-out.h>
+#include "alsactl_parser.h"
 
-// do not use interpolation, it creates audio artifacts.
-//#define USE_INTERPOLATION
+#define   PERIOD_SIZE  1024
+#define   PERIOD_NUM    4
+#define USE_INTERPOLATION
 
 static snd_pcm_sframes_t (*readi_func)(snd_pcm_t *handle, void *buffer, snd_pcm_uframes_t size);
 static snd_pcm_sframes_t (*writei_func)(snd_pcm_t *handle, const void *buffer, snd_pcm_uframes_t size);
@@ -31,8 +33,8 @@ static snd_pcm_sframes_t (*readn_func)(snd_pcm_t *handle, void **bufs, snd_pcm_u
 static snd_pcm_sframes_t (*writen_func)(snd_pcm_t *handle, void **bufs, snd_pcm_uframes_t size);
 
 
-static int fragcount = 16;
-static snd_pcm_uframes_t chunk_size = 1024;
+static int fragcount = PERIOD_NUM;
+static snd_pcm_uframes_t chunk_size = PERIOD_SIZE;
 static char output_buffer[64 * 1024];
 static unsigned char decode_buffer[OUTPUT_BUFFER_SIZE + 64];
 
@@ -114,58 +116,6 @@ static void pcm_interpolation(int interpolation, unsigned num_channel, unsigned 
 }
 #endif
 
-static int check_passthrough(void)
-{
-    int  val = 0;
-    char bcmd[256] = {0};
-    const char *path = "/sys/class/audiodsp/digital_raw";
-    int fd = open(path, O_RDONLY);
-    if (fd >= 0) {
-        read(fd, bcmd, sizeof(bcmd));
-        close(fd);
-        if (strstr(bcmd, "RAW") != 0)
-          val = 1;
-    }
-    return val;
-}
-
-static void pcm_deamplification(alsa_param_t *alsa_param, u_char *pcm_data, size_t pcm_frames)
-{
-    int i, nsamples;
-    short *pcm_samples;
-
-    if (alsa_param->pass_flag) {
-        // audio passthough is active, do not touch pcm_data,
-        return;
-    }
-
-    if (alsa_param->volume_deamp >= 1.0f) {
-        // deamplification required.
-        return;
-    }
-
-    if (alsa_param->format != SND_PCM_FORMAT_S16_LE) {
-        // we only handle 16-bit little endian pcm samples.
-        return;
-    }
-
-    pcm_samples = (unsigned short*)pcm_data;
-    nsamples = pcm_frames * alsa_param->channelcount;
-
-    if (alsa_param->mute_flag || alsa_param->volume_deamp <= 0.0f) {
-        // fast path for mute or volume <= 0.0.
-        for (i = 0; i < nsamples; i++) {
-            pcm_samples[i] = 0;
-        }
-    } else {
-        int value;
-        for (i = 0; i < nsamples; i++) {
-          // must be int. so that we can check over/under flow.
-          value = (int)((float)pcm_samples[i] * alsa_param->volume_deamp);
-          pcm_samples[i] = (short)value;
-        }
-    }
-}
 
 static int set_params(alsa_param_t *alsa_params)
 {
@@ -232,18 +182,25 @@ static int set_params(alsa_param_t *alsa_params)
     //bits_per_frame = bits_per_sample * hwparams.realchanl;
     alsa_params->bits_per_frame = alsa_params->bits_per_sample * alsa_params->channelcount;
 
+    bufsize = 	PERIOD_NUM*PERIOD_SIZE;
+    err = snd_pcm_hw_params_set_buffer_size_near(alsa_params->handle, hwparams,&bufsize);
+    if (err < 0) {
+        adec_print("Unable to set  buffer  size \n");
+        return err;
+    }
+	
     err = snd_pcm_hw_params_set_period_size_near(alsa_params->handle, hwparams, &chunk_size, NULL);
     if (err < 0) {
         adec_print("Unable to set period size \n");
         return err;
     }
-
-    //err = snd_pcm_hw_params_set_periods_near(handle, hwparams, &fragcount, NULL);
-    //if (err < 0) {
-    //  adec_print("Unable to set periods \n");
-    //  return err;
-    //}
-
+#if 0	
+    err = snd_pcm_hw_params_set_periods_near(alsa_params->handle, hwparams, &fragcount, NULL);
+    if (err < 0) {
+      adec_print("Unable to set periods \n");
+      return err;
+    }
+#endif	
     err = snd_pcm_hw_params(alsa_params->handle, hwparams);
     if (err < 0) {
         adec_print("Unable to install hw params:");
@@ -255,6 +212,7 @@ static int set_params(alsa_param_t *alsa_params)
         adec_print("Unable to get buffersize \n");
         return err;
     }
+	printf("alsa buffer frame size %d \n",bufsize);
     alsa_params->buffer_size = bufsize * alsa_params->bits_per_frame / 8;
 
 #if 1
@@ -326,7 +284,7 @@ static size_t pcm_write(alsa_param_t * alsa_param, u_char * data, size_t count)
         }
 
         if (r < 0) {
-            printf("xun in\n");
+            //printf("xun in\n");
             if ((r = snd_pcm_prepare(alsa_param->handle)) < 0) {
                 return 0;
             }
@@ -358,7 +316,6 @@ static unsigned oversample_play(alsa_param_t * alsa_param, char * src, unsigned 
                 *to ++ = *from++;
                 from += 2;
             }
-            pcm_deamplification(alsa_param, output_buffer, frames / 2);
             ret = pcm_write(alsa_param, output_buffer, frames / 2);
             ret = ret * alsa_param->bits_per_frame / 8;
             ret = ret * 2;
@@ -379,7 +336,6 @@ static unsigned oversample_play(alsa_param_t * alsa_param, char * src, unsigned 
                 *to++ = r;
             }
 #endif
-            pcm_deamplification(alsa_param, output_buffer, frames * 2);
             ret = pcm_write(alsa_param, output_buffer, frames * 2);
             ret = ret * alsa_param->bits_per_frame / 8;
             ret = ret / 2;
@@ -404,7 +360,6 @@ static unsigned oversample_play(alsa_param_t * alsa_param, char * src, unsigned 
                 *to++ = r;
             }
 #endif
-            pcm_deamplification(alsa_param, output_buffer, frames * 4);
             ret = pcm_write(alsa_param, output_buffer, frames * 4);
             ret = ret * alsa_param->bits_per_frame / 8;
             ret = ret / 4;
@@ -418,7 +373,6 @@ static unsigned oversample_play(alsa_param_t * alsa_param, char * src, unsigned 
                 *to++ = *from++;
                 from++;
             }
-            pcm_deamplification(alsa_param, output_buffer, frames);
             ret = pcm_write(alsa_param, output_buffer, frames);
             ret = ret * alsa_param->bits_per_frame / 8;
         } else if (alsa_param->oversample == 0) {
@@ -428,7 +382,6 @@ static unsigned oversample_play(alsa_param_t * alsa_param, char * src, unsigned 
                 *to++ = *from;
                 *to++ = *from++;
             }
-            pcm_deamplification(alsa_param, output_buffer, frames);
             ret = pcm_write(alsa_param, output_buffer, frames);
             ret = ret * (alsa_param->bits_per_frame) / 8;
             ret = ret / 2;
@@ -450,7 +403,6 @@ static unsigned oversample_play(alsa_param_t * alsa_param, char * src, unsigned 
                 *to++ = *from++;
             }
 #endif
-            pcm_deamplification(alsa_param, output_buffer, frames * 2);
             ret = pcm_write(alsa_param, output_buffer, frames * 2);
             ret = ret * (alsa_param->bits_per_frame) / 8;
             ret = ret / 4;
@@ -476,7 +428,6 @@ static unsigned oversample_play(alsa_param_t * alsa_param, char * src, unsigned 
                 *to++ = *from++;
             }
 #endif
-            pcm_deamplification(alsa_param, output_buffer, frames * 4);
             ret = pcm_write(alsa_param, output_buffer, frames * 4);
             ret = ret * (alsa_param->bits_per_frame) / 8;
             ret = ret / 8;
@@ -493,7 +444,6 @@ static int alsa_play(alsa_param_t * alsa_param, char * data, unsigned len)
     if (!alsa_param->flag) {
         l = len * 8 / alsa_param->bits_per_frame;
         l = l & (~(32 - 1)); /*driver only support  32 frames each time */
-        pcm_deamplification(alsa_param, data, l);
         r = pcm_write(alsa_param, data, l);
         r = r * alsa_param->bits_per_frame / 8;
     } else {
@@ -581,7 +531,7 @@ int alsa_init(struct aml_audio_dec* audec)
         return -1;
     }
     memset(alsa_param, 0, sizeof(alsa_param_t));
-
+    
     if (audec->samplerate >= (88200 + 96000) / 2) {
         alsa_param->flag = 1;
         alsa_param->oversample = -1;
@@ -648,11 +598,7 @@ int alsa_init(struct aml_audio_dec* audec)
     alsa_param->realchanl = audec->channels;
     //alsa_param->rate = audec->samplerate;
     alsa_param->format = SND_PCM_FORMAT_S16_LE;
-    alsa_param->wait_flag = 0;
-    // audio mute, passthough and volume deamplification
-    alsa_param->mute_flag = 0;
-    alsa_param->pass_flag = check_passthrough();
-    alsa_param->volume_deamp = 1.0f;
+   alsa_param->wait_flag=0;
 
 #ifdef USE_INTERPOLATION
     memset(pass1_history, 0, 64 * sizeof(int));
@@ -688,6 +634,7 @@ int alsa_init(struct aml_audio_dec* audec)
 
     alsa_param->playback_tid = tid;
 
+   alsactl_parser();
     return 0;
 }
 
@@ -770,7 +717,7 @@ int alsa_stop(struct aml_audio_dec* audec)
     alsa_param_t *alsa_params;
 
     alsa_params = (alsa_param_t *)audec->aout_ops.private_data;
-
+    alsa_params->pause_flag = 0; //we should clear pause flag ,as we can stop from paused state
     alsa_params->stop_flag = 1;
     alsa_params->wait_flag = 0;
     pthread_cond_signal(&alsa_params->playback_cond);
@@ -819,57 +766,95 @@ unsigned long alsa_latency(struct aml_audio_dec* audec)
     alsa_param_t *alsa_param = (alsa_param_t *)audec->aout_ops.private_data;
     buffered_data = alsa_param->buffer_size - alsa_get_space(alsa_param);
     sample_num = buffered_data / (alsa_param->channelcount * (alsa_param->bits_per_sample / 8)); /*16/2*/
-    return (sample_num * 1000) / alsa_param->rate;
+    return (sample_num * (1000 / alsa_param->rate));
 }
 
+/**
+* alsa dumy codec controls interface
+*/
+int dummy_alsa_control(char * id_string , long vol, int rw, long * value){
+    int err;
+    snd_hctl_t *hctl;
+    snd_ctl_elem_id_t *id;
+    snd_hctl_elem_t *elem;
+    snd_ctl_elem_value_t *control;
+    snd_ctl_elem_info_t *info;
+    snd_ctl_elem_type_t type;
+    unsigned int idx = 0, count;
+    long tmp, min, max;
+
+    if ((err = snd_hctl_open(&hctl, PCM_DEVICE_DEFAULT, 0)) < 0) { 
+        printf("Control %s open error: %s\n", PCM_DEVICE_DEFAULT, snd_strerror(err));
+        return err;
+    }
+    if (err = snd_hctl_load(hctl)< 0) {
+        printf("Control %s open error: %s\n", PCM_DEVICE_DEFAULT, snd_strerror(err));
+        return err;
+    }
+    snd_ctl_elem_id_alloca(&id);
+    snd_ctl_elem_id_set_interface(id, SND_CTL_ELEM_IFACE_MIXER);
+    snd_ctl_elem_id_set_name(id, id_string);
+    elem = snd_hctl_find_elem(hctl, id);
+    snd_ctl_elem_value_alloca(&control);
+    snd_ctl_elem_value_set_id(control, id);
+    snd_ctl_elem_info_alloca(&info);
+    if ((err = snd_hctl_elem_info(elem, info)) < 0) {
+        printf("Control %s snd_hctl_elem_info error: %s\n", PCM_DEVICE_DEFAULT, snd_strerror(err));
+		    return err;
+    }    
+    count = snd_ctl_elem_info_get_count(info);
+    type = snd_ctl_elem_info_get_type(info);
+    
+    for (idx = 0; idx < count; idx++) {
+        switch (type) {
+            case SND_CTL_ELEM_TYPE_BOOLEAN:
+                if(rw){
+                    tmp = 0;
+                    if (vol >= 1) {
+                        tmp = 1;
+                    }
+                    snd_ctl_elem_value_set_boolean(control, idx, tmp);
+                    err = snd_hctl_elem_write(elem, control);
+                }else             	
+		    *value = snd_ctl_elem_value_get_boolean(control, idx);
+		    break;
+            case SND_CTL_ELEM_TYPE_INTEGER:
+                if(rw){
+		    min = snd_ctl_elem_info_get_min(info);
+		    max = snd_ctl_elem_info_get_max(info);
+                    if ((vol >= min) && (vol <= max))
+                        tmp = vol;
+		    else if (vol < min)
+                        tmp = min;
+                    else if (vol > max)
+                        tmp = max;
+                    snd_ctl_elem_value_set_integer(control, idx, tmp);
+                    err = snd_hctl_elem_write(elem, control);
+                }else             	
+	            *value = snd_ctl_elem_value_get_integer(control, idx);
+		    break;
+            default:
+                printf("?");
+	        break;
+        }
+        if (err < 0){
+            printf ("control%s access error=%s,close control device\n", PCM_DEVICE_DEFAULT, snd_strerror(err));
+            snd_hctl_close(hctl);
+            return err;
+        }
+    }
+    
+    return 0;
+}
 /**
  * \brief mute output
  * \param audec pointer to audec
  * \param en  1 = mute, 0 = unmute
  * \return 0 on success otherwise negative error code
  */
-int alsa_mute(struct aml_audio_dec* audec, adec_bool_t en)
-{
-    alsa_param_t *alsa_param = (alsa_param_t *)audec->aout_ops.private_data;
-    alsa_param->mute_flag = en;
-    return 0;
+static int alsa_mute(struct aml_audio_dec* audec, adec_bool_t en){
+	return 0;
 }
-
-/**
- * \brief set output volume
- * \param audec pointer to audec
- * \param vol volume value
- * \return 0 on success otherwise negative error code
- */
-int alsa_set_volume(struct aml_audio_dec* audec, float vol)
-{
-    alsa_param_t *alsa_param = (alsa_param_t *)audec->aout_ops.private_data;
-
-    if (!alsa_param)
-      return 0;
-
-    if (vol > 1.0f)
-        alsa_param->volume_deamp = 1.0f;
-    else if (vol < 0.0f)
-        alsa_param->volume_deamp = 0.0f;
-    else
-        alsa_param->volume_deamp = vol;
-
-    return 0;
-}
-
-/**
- * \brief set left/right output volume
- * \param audec pointer to audec
- * \param lvol refer to left volume value
- * \param rvol refer to right volume value
- * \return 0 on success otherwise negative error code
- */
-int alsa_set_lrvolume(struct aml_audio_dec* audec, float lvol, float rvol)
-{
-    return 0;
-}
-
 /**
  * \brief get output handle
  * \param audec pointer to audec
@@ -885,6 +870,4 @@ void get_output_func(struct aml_audio_dec* audec)
     out_ops->stop = alsa_stop;
     out_ops->latency = alsa_latency;
     out_ops->mute = alsa_mute;
-    out_ops->set_volume = alsa_set_volume;
-    out_ops->set_lrvolume = alsa_set_lrvolume;
 }

@@ -7,6 +7,14 @@ ifneq ($(BOARD_VOUT_USES_FREESCALE),false)
 LOCAL_CFLAGS += -DENABLE_FREE_SCALE
 endif
 
+ifdef DOLBY_DAP
+LOCAL_CFLAGS += -DDOLBY_DAP_EN
+endif
+
+ifneq (0, $(shell expr $(PLATFORM_VERSION) \>= 4.3))
+    LOCAL_CFLAGS +=   -DUSE_ARM_AUDIO_DEC 
+endif
+
 LOCAL_SRC_FILES := $(notdir $(wildcard $(LOCAL_PATH)/*.c)) 												
 
 LOCAL_SRC_FILES +=system/android.c system/systemsetting.c
@@ -44,6 +52,10 @@ ifneq ($(BOARD_VOUT_USES_FREESCALE),false)
 LOCAL_CFLAGS += -DENABLE_FREE_SCALE
 endif
 
+ifdef DOLBY_DAP
+LOCAL_CFLAGS += -DDOLBY_DAP_EN
+endif
+
 LOCAL_SRC_FILES := $(notdir $(wildcard $(LOCAL_PATH)/*.c)) 									
 
 LOCAL_SRC_FILES +=system/android.c system/systemsetting.c
@@ -63,7 +75,7 @@ LOCAL_CFLAGS+=-DLIBPLAYER_BUILD_NAME=\"${LIBPLAYER_BUILD_NAME}\"
 LOCAL_CFLAGS+=-DLIBPLAYER_GIT_UNCOMMIT_FILE_NUM=${LIBPLAYER_GIT_UNCOMMIT_FILE_NUM}
 
 LOCAL_STATIC_LIBRARIES := libamcodec libavformat librtmp libswscale libavcodec libavutil libamadec
-LOCAL_SHARED_LIBRARIES += libutils libmedia libz libbinder libdl libcutils libc libamavutils libssl libcrypto libamavutils
+LOCAL_SHARED_LIBRARIES += libutils libmedia libz libbinder libdl libcutils libc libamavutils libssl libcrypto
 
 LOCAL_MODULE := libamplayer
 LOCAL_MODULE_TAGS := optional

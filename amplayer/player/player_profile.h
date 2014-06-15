@@ -6,6 +6,7 @@
 #define FLAGS_FORCE_UPDATE          (1<<0)
 
 typedef struct {
+    int exist;
 } sys_h264_profile_t;
 
 typedef struct {
@@ -33,6 +34,14 @@ typedef struct {
 
 } sys_mjpeg_profile_t;
 
+typedef struct {
+    int exist;
+} sys_h264_4k2k_profile_t;
+
+typedef struct {
+    int exist;
+} sys_hmvc_profile_t;
+
 typedef struct _system_para_ {
     sys_h264_profile_t      h264_para;
     sys_vc1_profile_t       vc1_para;
@@ -40,6 +49,8 @@ typedef struct _system_para_ {
     sys_mpeg12_profile_t    mpeg12_para;
     sys_mpeg4_profile_t     mpeg4_para;
     sys_mjpeg_profile_t     mjpeg_para;
+    sys_h264_4k2k_profile_t h264_4k2k_para;
+    sys_hmvc_profile_t      hmvc_para;
 } vdec_profile_t;
 
 /*for update player's profile */
