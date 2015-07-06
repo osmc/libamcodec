@@ -349,7 +349,7 @@ static void *adec_message_loop(void *args)
             usleep(100000);
             continue;
         }
-
+        
         switch (msg->ctrl_cmd) {
         case CMD_START:
 
@@ -652,7 +652,7 @@ int audiodec_init(aml_audio_dec_t *audec)
 		//pthread_setname_np(tid,"AmadecMsgloop");
     }
     else 
-    {
+    {   
         int codec_type=get_audio_decoder();
         res=RegisterDecode(audec,codec_type);
         if(!res){ 		

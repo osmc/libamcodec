@@ -278,7 +278,15 @@ static inline int codec_video_es_init(codec_para_t *pcodec)
     }
 
     flags |= pcodec->noblock ? O_NONBLOCK : 0;
-    handle = codec_h_open(CODEC_VIDEO_ES_DEVICE, flags);
+    if(pcodec->video_type == VFORMAT_HEVC) {
+		printf("OPEN es hevc\n");
+      handle = codec_h_open(CODEC_VIDEO_ES_HEVC_DEVICE, flags);
+    }
+    else {
+		CODEC_PRINT("OPEN es DEVICE\n");
+      handle = codec_h_open(CODEC_VIDEO_ES_DEVICE, flags);
+    }
+    
     if (handle < 0) {
         codec_r = system_error_to_codec_error(handle);
         print_error_msg(codec_r, errno, __FUNCTION__, __LINE__);
@@ -1377,6 +1385,7 @@ int codec_close_cntl(codec_para_t *pcodec)
         if (pcodec->cntl_handle) {
             res = codec_h_control(pcodec->cntl_handle, AMSTREAM_IOC_CLEAR_VIDEO, 0);
             res = codec_h_close(pcodec->cntl_handle);
+		    CODEC_PRINT("[%s]video codec close return=%d!\n", __FUNCTION__,res);
         }
     }
     return res;

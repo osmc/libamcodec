@@ -79,7 +79,7 @@ int am_getconfig(const char * path, char *val, const char * def)
     if (!amconfig_inited) {
         am_config_init();
     }
-    val[0]="\0";	
+    val[0]='\0';	
     lp_lock(&config_lock);
     i = get_matched_index(path);
     if (i >= 0) {
