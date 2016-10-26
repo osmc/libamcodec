@@ -10,8 +10,8 @@ INSTALL_DIR=${M_PREFIX}/lib
 
 LDFLAGS += -shared -lpthread -lm -lasound -lrt -ldl -lamavutils
 
-CFLAGS+=-O2 -fPIC
-CFLAGS+=-I$(shell pwd) -I$(shell pwd)/include -I$(shell pwd)/../amavutils/include -I${PREFIX}/include -I${PREFIX}/usr/include -L${PREFIX}/lib -L${PREFIX}/usr/lib
+CFLAGS+=-fPIC
+CFLAGS+=-I$(shell pwd) -I$(shell pwd)/include -I$(shell pwd)/../amavutils/include -I${PREFIX}/include -I${PREFIX}/usr/include -L${PREFIX}/lib -L${PREFIX}/usr/lib -L$(shell pwd)/../amavutils
 CFLAGS+=-DALSA_OUT
 
 ifdef DOLBY_UDC
