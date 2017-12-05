@@ -29,7 +29,7 @@ DIRS=audio_ctl/ codec/
 LIB_VERSION=
 LIB_SUB_VERSION=.0.0
 
-LDFLAGS+=  -O2  -L$(PREFIX)/lib  -lamadec -lm -lc  -shared -Wl,--shared -Wl,-soname,$(TARGET)$(LIB_VERSION)
+LDFLAGS+= -L$(PREFIX)/lib  -lamadec -lm -lc  -shared -Wl,--shared -Wl,-soname,$(TARGET)$(LIB_VERSION)
 
 #INCLUDE=$(DIRS:%/=-I$(SRC)/%/include)
 INCLUDE=${SRCTREE}/include/ 

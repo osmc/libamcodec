@@ -7,7 +7,7 @@ LDFLAGS += -shared -lpthread -lm -lrt
 TARGET_DIR=$(shell pwd)/../../../target
 STAGING_DIR=$(shell pwd)/../../../staging
 
-CFLAGS+=-O2 -fPIC
+CFLAGS+=-fPIC
 CFLAGS+=-I$(shell pwd) -I$(shell pwd)/include -I$(shell pwd)/../amcodec/include -I${STAGING_DIR}/include -I${STAGING_DIR}/usr/include -L${TARGET_DIR}/lib -L${TARGET_DIR}/usr/lib
 
 export CC CFLAGS
