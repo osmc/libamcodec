@@ -49,6 +49,7 @@ typedef enum {
     INITTED,
     ACTIVE,
     PAUSED,
+    GAPPING,
 } adec_state_t;
 
 #endif

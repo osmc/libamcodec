@@ -59,6 +59,7 @@ int audio_decode_init(void **handle, arm_audio_info *a_ainfo)
 	audec->bitrate=a_ainfo->bitrate;
 	audec->block_align=a_ainfo->block_align;
 	audec->codec_id=a_ainfo->codec_id;
+    audec->auto_mute=a_ainfo->automute;
 	if (a_ainfo->droppcm_flag) {
 		audec->droppcm_flag = a_ainfo->droppcm_flag;
 		a_ainfo->droppcm_flag = 0;
@@ -67,6 +68,10 @@ int audio_decode_init(void **handle, arm_audio_info *a_ainfo)
         memcpy((char*)audec->extradata,(char*)a_ainfo->extradata,a_ainfo->extradata_size);
     audec->adsp_ops.audec=(void *)audec;    
 //	adec_print("audio_decode_init  pcodec = %d, pcodec->ctxCodec = %d!\n", pcodec, pcodec->ctxCodec);
+    audec->volume_ease_start = 1.0;
+    audec->volume_ease_cur = 1.0;
+    audec->volume_ease_end = 1.0;
+    
     ret = audiodec_init(audec);
     if (ret) {
         adec_print("adec init failed!");
@@ -385,6 +390,46 @@ int audio_decode_set_lrvolume(void *handle, float lvol,float rvol)
  * \brief set audio volume
  * \param handle pointer to player private data
  * \param vol volume value
+ * \param duration volume ease duration in millisecond
+ * \param method volume ease method
+ * \return 0 on success otherwise -1 if an error occurred
+ */
+int audio_decode_set_volume_ease(void *handle, float vol, unsigned int duration, int method)
+{
+    int ret;
+    adec_cmd_t *cmd;
+    aml_audio_dec_t *audec = (aml_audio_dec_t *)handle;
+
+    if (!handle) {
+        adec_print("audio handle is NULL !\n");
+        return -1;
+    }
+
+    if ((method < 0) || (method > 2)) {
+        adec_print("invalid volume ease method !\n");
+        return -1;
+    }
+
+    cmd = adec_message_alloc();
+    if (cmd) {
+        cmd->ctrl_cmd = CMD_SET_VOL_EASE;
+        cmd->value.volume = vol;
+        cmd->value_ext.en = method;
+        cmd->value_ext2 = duration;
+        cmd->has_arg = 1;
+        ret = adec_send_message(audec, cmd);
+    } else {
+        adec_print("message alloc failed, no memory!");
+        ret = -1;
+    }
+
+    return ret;
+}
+
+/**
+ * \brief set audio volume
+ * \param handle pointer to player private data
+ * \param vol volume value
  * \return 0 on success otherwise -1 if an error occurred
  */
 int audio_decode_get_volume(void *handle, float *vol)
@@ -425,6 +470,37 @@ int audio_decode_get_lrvolume(void *handle, float *lvol,float* rvol)
 
     return ret;
 }
+
+/**
+ * \brief set audio volume
+ * \param handle pointer to player private data
+ * \param vol: current vulume
+ * \param duration: remaining duration for ease target volume
+ * \return 0 on success otherwise -1 if an error occurred
+ */
+int audio_decode_get_volume_ease(void *handle, float *vol, unsigned int *duration)
+{
+    int ret = 0;
+    adec_cmd_t *cmd;
+    aml_audio_dec_t *audec = (aml_audio_dec_t *)handle;
+
+    if (!handle) {
+        adec_print("audio handle is NULL !\n");
+        return -1;
+    }
+
+    adec_print("audio_decode_get_volume_ease %f\n", audec->volume_ease_cur);
+    *vol = audec->volume_ease_cur;
+    if (audec->volume_ease_update) {
+        *duration = audec->volume_ease_duration_staging;
+    } else {
+        *duration = audec->volume_ease_duration_staging - audec->volume_ease_sample * 1000 / audec->samplerate;
+    }
+
+    return ret;
+}
+
+
 
 /**
  * \brief swap audio left and right channels

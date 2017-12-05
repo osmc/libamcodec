@@ -14,7 +14,9 @@
 
 #include "codec_type.h"
 #include "codec_error.h"
-
+#ifdef __cplusplus
+extern "C" {
+#endif
 int codec_init(codec_para_t *);
 int codec_close(codec_para_t *);
 void codec_audio_basic_init(void);
@@ -61,6 +63,8 @@ int codec_set_mute(codec_para_t *p, int mute);
 int codec_get_volume_range(codec_para_t *, int *min, int *max);
 int codec_set_volume(codec_para_t *, float val);
 int codec_get_volume(codec_para_t *, float *val);
+int codec_set_volume_ease(codec_para_t *, float val, unsigned int duration, int method);
+int codec_get_volume_ease(codec_para_t *, float *val, unsigned int *duration);
 int codec_set_lrvolume(codec_para_t *, float lvol,float rvol);
 int codec_get_lrvolume(codec_para_t *, float *lvol,float* rvol);
 int codec_get_mutesta(codec_para_t *);
@@ -115,6 +119,8 @@ int codec_get_audio_cur_bitrate(codec_para_t *pcodec,int *bitrate);
 
 int codec_set_vsync_upint(codec_para_t *pcodec, unsigned int mode);
 
+int codec_set_drmmode(codec_para_t *pcodec, unsigned int mode);
+
 int codec_get_last_checkout_apts(codec_para_t* pcodec, unsigned long *apts);
 int codec_get_last_checkin_apts(codec_para_t* pcodec, unsigned long *apts);
 /*add for gstreamer fast/slow forward*/
@@ -123,4 +129,7 @@ int codec_set_video_playrate(codec_para_t* pcodec, int rate);
 int dummy_codec_set_mute(int mute);
 int dummy_codec_set_volume(int vol);
 int dummy_codec_get_volume(int *vol);
+#ifdef __cplusplus
+}
+#endif
 #endif

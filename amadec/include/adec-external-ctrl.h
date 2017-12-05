@@ -26,6 +26,8 @@ extern "C"
     int audio_decode_set_mute(void *handle, int);
     int audio_decode_set_volume(void *, float);
     int audio_decode_get_volume(void *, float *);
+    int audio_decode_set_volume_ease(void *, float, unsigned int, int);
+    int audio_decode_get_volume_ease(void *, float *, unsigned int *);
     int audio_channels_swap(void *);
     int audio_channel_left_mono(void *);
     int audio_channel_right_mono(void *);

@@ -35,16 +35,15 @@ ADEC_BEGIN_DECLS
 
 //for ffmpeg audio decode
 #define AMSTREAM_IOC_MAGIC  'S'
-#define AMSTREAM_IOC_APTS_LOOKUP    _IOR(AMSTREAM_IOC_MAGIC, 0x81,unsigned long)   
-#define GET_FIRST_APTS_FLAG			_IOR(AMSTREAM_IOC_MAGIC, 0x82, long)
-
+#define AMSTREAM_IOC_APTS_LOOKUP    _IOR((AMSTREAM_IOC_MAGIC), 0x81, int)  
+#define GET_FIRST_APTS_FLAG    _IOR((AMSTREAM_IOC_MAGIC), 0x82, int)
 //-----------------------------------------------
 //copy from file: "../amcodec/include/amports/amstream.h"
 #ifndef AMSTREAM_IOC_PCRSCR
-#define AMSTREAM_IOC_PCRSCR           _IOR(AMSTREAM_IOC_MAGIC, 0x42, unsigned long)
+#define AMSTREAM_IOC_PCRSCR  _IOR((AMSTREAM_IOC_MAGIC), 0x42, int)
 #endif
 #ifndef AMSTREAM_IOC_SET_APTS
-#define AMSTREAM_IOC_SET_APTS         _IOW(AMSTREAM_IOC_MAGIC, 0xa8, unsigned long)
+#define AMSTREAM_IOC_SET_APTS  _IOW((AMSTREAM_IOC_MAGIC), 0xa8, int)
 #endif
 
 //-----------------------------------------------
@@ -136,8 +135,8 @@ struct aml_audio_dec {
 
     buffer_stream_t *g_bst;
     buffer_stream_t *g_bst_raw;
-    int sn_threadid;
-    int sn_getpackage_threadid;
+    pthread_t sn_threadid;
+    pthread_t sn_getpackage_threadid;
     int exit_decode_thread;
     int exit_decode_thread_success;
     unsigned long decode_offset;
@@ -159,6 +158,18 @@ struct aml_audio_dec {
     fp_arm_omx_codec_get_FS     parm_omx_codec_get_FS;
     fp_arm_omx_codec_get_Nch    parm_omx_codec_get_Nch;
     int OmxFirstFrameDecoded;
+    float volume_ease_start;
+    float volume_ease_cur;
+    float volume_ease_end;
+    unsigned int volume_ease_duration;
+    unsigned int volume_ease_sample;
+    int volume_ease_method;
+    int volume_ease_update;
+    float volume_ease_end_staging;
+    unsigned int volume_ease_duration_staging;
+    int volume_ease_method_staging;
+
+    int gap_end_pts;
 };
 
 //from amcodec
@@ -175,6 +186,7 @@ typedef struct {
 	int SessionID;
 	int dspdec_not_supported;//check some profile that audiodsp decoder can not support,we switch to arm decoder	
 	int droppcm_flag;				// drop pcm flag, if switch audio (1)
+	int automute;
 } arm_audio_info;
 
  typedef struct {
@@ -227,6 +239,13 @@ struct adec_status {
 #define    ACODEC_FMT_APE    20
 #define    ACODEC_FMT_EAC3    21 
 #define    ACODEC_FMT_WIFIDISPLAY 22
+
+
+//audio output type
+
+#define    AUDIO_PCM_OUTPUT 0//output pcm data
+#define    AUDIO_SPDIF_PASSTHROUGH 1//passthrough type as dd
+#define    AUDIO_HDMI_PASSTHROUGH 2//passthrough type as ddplus
 
 
 /***********************************************************************************************/

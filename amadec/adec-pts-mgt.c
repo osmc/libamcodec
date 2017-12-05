@@ -134,9 +134,9 @@ int adec_pts_start(aml_audio_dec_t *audec)
 	    }
 	}
 
-    adec_print("audio pts start from 0x%lx", pts);
+    adec_print("audio pts start from 0x%lx\n", pts);
 
-    sprintf(buf, "AUDIO_START:0x%lx", pts);
+    sprintf(buf, "AUDIO_START:0x%lx\n", pts);
 
     if(amsysfs_set_sysfs_str(TSYNC_EVENT, buf) == -1)
     {
@@ -249,7 +249,7 @@ int adec_pts_droppcm(aml_audio_dec_t *audec)
  */
 int adec_pts_pause(void)
 {
-    adec_print("adec_pts_pause");
+    adec_print("adec_pts_pause\n");
     return amsysfs_set_sysfs_str(TSYNC_EVENT, "AUDIO_PAUSE");
 }
 
@@ -259,7 +259,7 @@ int adec_pts_pause(void)
  */
 int adec_pts_resume(void)
 {
-    adec_print("adec_pts_resume");
+    adec_print("adec_pts_resume\n");
     return amsysfs_set_sysfs_str(TSYNC_EVENT, "AUDIO_RESUME");
 
 }
@@ -325,14 +325,29 @@ int adec_refresh_pts(aml_audio_dec_t *audec)
         return 0;
     }
 
+    //adec_print("last_kernel_pts = %d", last_kernel_pts/90);
+    if ((((int)(audec->adsp_ops.kernel_audio_pts - last_kernel_pts)) > 500 * 90) && (audec->adsp_ops.last_pts_valid)) {
+        // if there is APTS interrupt (audio gap possible in Netflix NTS case)
+        adec_print("Audio gap, %d->%d", last_kernel_pts/90, audec->adsp_ops.kernel_audio_pts/90);
+        avsync_en(0);
+        adec_pts_pause();
+        audec->state = GAPPING;
+        return 0;
+    }
+
+    if (audec->state == GAPPING)
+        return 0;
+
     audec->adsp_ops.last_audio_pts = pts;
     audec->adsp_ops.last_pts_valid = 1;
 
     if (abs(pts - systime) < audec->avsync_threshold) {
-        apts_interrupt=0;
+        //adec_print("pts=0x%x, systime=0x%x, diff = %d ms", pts, systime,  ((int)(pts-systime))/90);
+        apts_interrupt=5;
         return 0;
     }
     else if(apts_interrupt>0){
+        //adec_print("apts_interrupt=%d, pts=0x%x, systime=0x%x, diff = %d ms", apts_interrupt, pts, systime, (pts-systime)/90);
         apts_interrupt --;
         return 0;
         }
@@ -386,16 +401,43 @@ int track_switch_pts(aml_audio_dec_t *audec)
 
     pcr = audec->adsp_ops.get_cur_pcrscr(&audec->adsp_ops);
     if (pcr == -1) {
-        adec_print("unable to get pcr");
+        adec_print("track_switch_pts unable to get pcr");
         return 1;
     }
 
     apts = adec_calc_pts(audec);
     if (apts == -1) {
-        adec_print("unable to get apts");
+        adec_print("track_switch_pts unable to get apts");
         return 1;
     }
     
+    // adec_calc_pts returns apts with fixed track latency correct,
+    // which is not correctly reflects the delay when output has not
+    // been started at switching case.
+    // accurate timeing control for when to start feeding audio data
+    // is important to make audio switching smooth and avoid resetting
+    // system time from APTS of the new audio track. We need start audio
+    // track feeding to make the time stamp of the first audio sample
+    // output from HW is exactly the system time set up before switching.
+    // Unfurtunately, we never know how long it will take at Android
+    // AudioFlinger. adec_calc_pts has a fixed latency applied to APTS,
+    // when audio buffers in the AudioFlinger/Output pipeline is full,
+    // this offset is almost right. However, when initially the pipeline
+    // is all empty, use fixed latency is not correct.
+    // The number given below is a correction on top of the fixed latency.
+    // e.g., assuming system time is 10000ms, first apts is 12000ms, latency
+    // is 100ms, then adec_calc_pts returns 12000-100 = 11900ms. The external
+    // loop will wait 100ms to finish switching wait. When system time is 11900ms,
+    // audio data with 12000ms is fed to AudioFlinger, but it does not take 100ms
+    // to get output. With 100ms fixed latency, the data feeding is too earlier
+    // and this will cause apts reset system time soon.
+    // the number below of 50ms is from experiment. It assumes the time between
+    // first data feeding to output is 100-50=50ms. 
+
+    apts += 50*90;
+
+    adec_print("track_switch_pts apts=%d, pcr=%d, kernel_pts=%d\n", apts/90, pcr/90, audec->adsp_ops.kernel_audio_pts/90);
+
     if((apts > pcr) && (apts - pcr > 0x100000))
         return 0;
 		

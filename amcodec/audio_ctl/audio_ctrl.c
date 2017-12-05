@@ -202,6 +202,45 @@ int codec_get_volume(codec_para_t *p, float *val)
 
 /* --------------------------------------------------------------------------*/
 /**
+* @brief  codec_set_volume  Set audio volume
+*
+* @param[in]  p    Pointer of codec parameter structure
+* @param[in]  val  Target volume to be set
+* @param[in]  duration Time needed to set target volume in millisecond unit
+* @param[in]  method The method for easing effect:
+*             0:EaseLinear, 1:EaseInCubic, 2:EaseOutCubic
+*
+* @return     command result
+*/
+/* --------------------------------------------------------------------------*/
+int codec_set_volume_ease(codec_para_t *p, float val, unsigned int duration, int method)
+{
+    int ret;
+
+    ret = audio_decode_set_volume_ease(p->adec_priv, val, duration, method);
+    return ret;
+}
+
+/* --------------------------------------------------------------------------*/
+/**
+* @brief  codec_get_volume_ease  Get audio volume
+*
+* @param[in]  p   Pointer of codec parameter structure
+* @param[out] val Pointer of returned valume (changing during ease operation)
+* @param[out] duration Pointer of remaining MS time needed for ease operation
+*
+* @return     command result
+*/
+/* --------------------------------------------------------------------------*/
+int codec_get_volume_ease(codec_para_t *p, float *val, unsigned int *duration)
+{
+    int ret;
+    ret = audio_decode_get_volume_ease(p->adec_priv, val, duration);
+    return ret;
+}
+
+/* --------------------------------------------------------------------------*/
+/**
 * @brief  codec_set_volume  Set audio volume seperately
 *
 * @param[in]  p    Pointer of codec parameter structure

@@ -2,6 +2,8 @@
 #define ALSA_OUT_H
 
 #define PCM_DEVICE_DEFAULT      "default"
+#define PCM_DEVICE_DMIX         "dmix"
+
 #define OUTPUT_BUFFER_SIZE      (8*1024)
 
 typedef struct {

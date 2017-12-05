@@ -95,6 +95,7 @@ unsigned int noblock:
     int SessionID;
 	int dspdec_not_supported;//check some profile that audiodsp decoder can not support,we switch to arm decoder
 	int switch_audio_flag;		//<switch audio flag switching(1) else(0)
+    int automute_flag;
 } codec_para_t;
 
 typedef struct 
@@ -125,6 +126,8 @@ typedef struct {
 	int SessionID;
 	int dspdec_not_supported;//check some profile that audiodsp decoder can not support,we switch to arm decoder	
 	int droppcm_flag;				// drop pcm flag, if switch audio (1)
+    int automute;
+    unsigned int has_video;
 } arm_audio_info;
 
 //audio decoder type, default arc

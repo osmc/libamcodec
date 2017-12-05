@@ -21,6 +21,7 @@ ADEC_BEGIN_DECLS
 #define TSYNC_VPTS      "/sys/class/tsync/pts_video"
 #define TSYNC_ENABLE  "/sys/class/tsync/enable"
 #define TSYNC_LAST_CHECKIN_APTS "/sys/class/tsync/last_checkin_apts"
+#define TSYNC_MODE   "/sys/class/tsync/mode"
 
 #define SYSTIME_CORRECTION_THRESHOLD        (90000*15/100)
 #define APTS_DISCONTINUE_THRESHOLD          (90000*3)

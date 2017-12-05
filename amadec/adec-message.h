@@ -15,7 +15,7 @@
 
 ADEC_BEGIN_DECLS
 
-#define MESSAGE_NUM_MAX    12
+#define MESSAGE_NUM_MAX    13
 
 typedef enum {
     CMD_START = 1 << 0,
@@ -29,14 +29,15 @@ typedef enum {
     CMD_LEFT_MONO = 1 << 8,
     CMD_RIGHT_MONO = 1 << 9,
     CMD_STEREO = 1 << 10,
-    CMD_SET_LRVOL = 1<<20,    
+    CMD_SET_LRVOL = 1<<20,
+    CMD_SET_VOL_EASE = 1<<21,
     CMD_RELEASE = 1 << 31,
 } ctrl_cmd_t;
 
 
 typedef struct {
     int type;               /* 1 = reply; 0 = no reply */
-    int has_arg;         /* 1 = value is valid; 0 = value is unvalid */
+    int has_arg;         /* 1 = value is valid; 0 = value is invalid */
     ctrl_cmd_t  ctrl_cmd;
     union {
         int en;
@@ -45,7 +46,8 @@ typedef struct {
     union {
         int en;
         float volume;
-    } value_ext;	
+    } value_ext;
+    unsigned int value_ext2;
 } adec_cmd_t;
 
 typedef struct {

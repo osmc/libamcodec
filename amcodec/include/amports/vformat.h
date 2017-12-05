@@ -51,6 +51,7 @@ typedef enum {
     VIDEO_DEC_FORMAT_AVS,
     VIDEO_DEC_FORMAT_H264_4K2K,
     VIDEO_DEC_FORMAT_HEVC,
+    VIDEO_DEC_FORMAT_VP9 ,
     VIDEO_DEC_FORMAT_MAX
 } vdec_type_t;
 
@@ -68,8 +69,13 @@ typedef enum {
     VFORMAT_H264MVC,
     VFORMAT_H264_4K2K,
     VFORMAT_HEVC,
-    VFORMAT_UNSUPPORT,
-    VFORMAT_MAX
+    VFORMAT_H264_ENC,
+    VFORMAT_JPEG_ENC,
+    VFORMAT_VP9,
+
+/*add new here before.*/
+    VFORMAT_MAX,
+    VFORMAT_UNSUPPORT = VFORMAT_MAX
 } vformat_t;
 
 #define IS_VFMT_VALID(vfmt)	((vfmt > VFORMAT_UNKNOWN) && (vfmt < VFORMAT_MAX))
@@ -103,7 +109,6 @@ typedef enum {
 #define CODEC_TAG_mp4v      (0x7634706d)
 #define CODEC_TAG_AVC1      (0x31435641)
 #define CODEC_TAG_avc1      (0x31637661)
-#define CODEC_TAG_hvc1      (0x31637668)
 #define CODEC_TAG_H264      (0x34363248)
 #define CODEC_TAG_h264      (0x34363268)
 #define CODEC_TAG_HEVC      (0x43564548)
@@ -120,5 +125,7 @@ typedef enum {
 #define CODEC_TAG_WMVA      (0x41564d57)
 #define CODEC_TAG_FMP4      (0x34504d46)
 #define CODEC_TAG_FVFW      (0x57465646)
+#define CODEC_TAG_VC_1      (0x312d4356)
+#define CODEC_TAG_vc_1      (0x312d6376)
 
 #endif /* VFORMAT_H */

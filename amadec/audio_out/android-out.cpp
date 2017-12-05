@@ -28,10 +28,16 @@ extern "C" {
 #include <Amsysfsutils.h>
 }
 
+//#define DUMP_PCM
+
 namespace android
 {
 
 static Mutex mLock;
+#ifdef DUMP_PCM
+static int mDumpPcmFd = -1;
+#endif
+extern "C" int android_pause(struct aml_audio_dec* audec);
 static int get_digitalraw_mode(void)
 {
     int fd;
@@ -222,6 +228,12 @@ void audioCallback(int event, void* user, void *info)
       adec_refresh_pts(audec);
     }
 
+    if (audec->state == GAPPING) {
+        adec_print(" ****************** audio callback blocked by gapping");
+        android_pause(audec);
+        return;
+    }
+
     if(wfd_enable){
       // filtering
       diff_record[diff_wp++] = diff;
@@ -275,6 +287,13 @@ void audioCallback(int event, void* user, void *info)
         af_resample_api_normal((char*)(buffer->i16), &buffer->size, buffer->channelCount, audec);
         #endif 
       }
+	  
+#ifdef DUMP_PCM
+		if (mDumpPcmFd >= 0) {
+            write(mDumpPcmFd, buffer->i16, buffer->size);
+        }
+#endif
+	  
      } else {
         adec_print("audioCallback: dsp not work!\n");
     }
@@ -511,7 +530,10 @@ extern "C" int android_init_raw(struct aml_audio_dec* audec)
  */
 extern "C" int android_init(struct aml_audio_dec* audec)
 {
-   
+#ifdef DUMP_PCM
+    static int aidx = 0;
+    char afn[32];
+#endif
     
     status_t status;
     AudioTrack *track;
@@ -644,6 +666,10 @@ extern "C" int android_init(struct aml_audio_dec* audec)
     }
     af_resample_linear_init();
     out_ops->private_data = (void *)track;
+#ifdef DUMP_PCM
+    sprintf(afn, "/tmp/aout" "_%d.pcm", aidx++);
+    mDumpPcmFd = open(afn, O_WRONLY | O_CREAT, 0644);
+#endif
     return 0;
 }
 #ifdef USE_ARM_AUDIO_DEC
@@ -665,8 +691,9 @@ extern "C" int android_start_raw(struct aml_audio_dec* audec)
            return -1;
     }
     
-    track->start();
-    adec_print("[%s %d]AudioTrack_raw initCheck OK and started.",__FUNCTION__,__LINE__);
+    //track->start();
+    //adec_print("[%s %d]AudioTrack_raw initCheck OK and started.",__FUNCTION__,__LINE__);
+    adec_print("[%s %d]AudioTrack_raw initCheck OK.",__FUNCTION__,__LINE__);
     return 0;
 }
 #endif
@@ -707,8 +734,9 @@ extern "C" int android_start(struct aml_audio_dec* audec)
         out_ops->private_data = NULL;
         return -1;
     }
-    track->start();
-    adec_print("AudioTrack initCheck OK and started.");
+    //track->start();
+    //adec_print("AudioTrack initCheck OK and started.");
+    adec_print("AudioTrack initCheck OK.");
     
     return 0;
 }
@@ -852,6 +880,11 @@ extern "C" int android_stop(struct aml_audio_dec* audec)
     restore_system_samplerate();	
 
     restore_system_framesize();
+#ifdef DUMP_PCM
+    if (mDumpPcmFd >= 0) {
+        close(mDumpPcmFd);
+    }
+#endif
 
     return 0;
 }
@@ -865,6 +898,7 @@ extern "C" unsigned long android_latency(struct aml_audio_dec* audec)
 {
     unsigned long latency;
     audio_out_operations_t *out_ops = &audec->aout_ops;
+#if 0
     AudioTrack *track = (AudioTrack *)out_ops->private_data;
 
     if (track) {
@@ -873,6 +907,8 @@ extern "C" unsigned long android_latency(struct aml_audio_dec* audec)
     }
 
     return 0;
+#endif
+    return 100;
 }
 #ifndef ANDROID_VERSION_JBMR2_UP
 /**

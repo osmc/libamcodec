@@ -11,6 +11,8 @@
 #ifndef LOG_PRINT_H
 #define LOG_PRINT_H
 
+#define adec_print printf
+#if 0
 #ifdef ANDROID
 #include <android/log.h>
 #include <stdio.h>
@@ -26,6 +28,6 @@ char *level;
 						   fprintf(stderr,f,##s);\
 						   else; }while(0);
 #endif
-
+#endif
 
 #endif
