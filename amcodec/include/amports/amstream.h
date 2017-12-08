@@ -34,8 +34,8 @@
 #ifndef AMSTREAM_H
 #define AMSTREAM_H
 
-#include "amports/vformat.h"
-#include "amports/aformat.h"
+#include "vformat.h"
+#include "aformat.h"
 #define PORT_FLAG_IN_USE    0x0001
 #define PORT_FLAG_VFORMAT   0x0002
 #define PORT_FLAG_AFORMAT   0x0004
