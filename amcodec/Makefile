@@ -1,68 +1,32 @@
+M_PREFIX=$(PREFIX)
 
-ROOTFS?=$(PREFIX)
-LIB_DIR?=$(PREFIX)/lib
-HEADERS_DIR?=$(INC_DIR)/include
-CROSS=$(CC:%gcc=%)
-QUITE_CMD=1
+TARGET=libamcodec.so
 
-INSTALL_FLAGS=-m 755
+TARGET_OBJS=\
+        codec/codec_ctrl.c \
+	codec/codec_h_ctrl.c \
+	codec/codec_msg.c \
+	audio_ctl/audio_ctrl.c
 
-CPP=$(CROSS)g++
-AS=$(CROSS)as
-AR=$(CROSS)ar
-LD=$(CROSS)ld
-NM=$(CROSS)nm
-STRIP=$(CROSS)strip
-OBJCOPY=$(CROSS)objcopy
-export CC CPP AS AR LD NM STRIP OBJCOPY
+INSTALL_DIR=${M_PREFIX}/lib
 
-TOPDIR=$(shell pwd)
-SRC?=$(TOPDIR)
-SRCTREE=$(SRC)
-BUILDTREE=$(SRC)/out
+HEADERS_DIR=$(M_PREFIX)/amcodec/include
 
+LDFLAGS +=-L$(PREFIX)/lib -lamadec -lm -lc -shared
 
-TARGET?=libamcodec.so
+CFLAGS+=-I$(shell pwd)/include -I$(shell pwd)/audio_ctl -I$(shell pwd)/codec -I$(shell pwd)/../amadec/include -I$(shell pwd)/../amavutils/include -I${SRCTREE}/codec/yuvplayer -fPIC -I$(shell pwd)/../amffmpeg -L$(shell pwd)/../amadec
 
-DIRS=audio_ctl/ codec/
+export CC CFLAGS
 
-LIB_VERSION=
-LIB_SUB_VERSION=.0.0
+all: $(TARGET)
 
-LDFLAGS+= -L$(PREFIX)/lib  -lamadec -lm -lc  -shared -Wl,--shared -Wl,-soname,$(TARGET)$(LIB_VERSION)
+$(TARGET): $(TARGET_OBJS)
+	$(CC) $(CFLAGS) $(TARGET_OBJS:%.o=%.c) $(LDFLAGS) -o $@
 
-#INCLUDE=$(DIRS:%/=-I$(SRC)/%/include)
-INCLUDE=${SRCTREE}/include/ 
-#CFLAGS=-O0  -gdwarf-2  -g
-CFLAGS=-O2   -I$(SRC)/include  -I${SRCTREE}/audio_ctl -I${SRCTREE}/codec -I${SRCTREE}/../amadec/include -fPIC
-
-
-
-
-target_all=  $(TARGET)$(LIB_VERSION)$(LIB_SUB_VERSION)
-all:$(target_all)
-
-dirs=$(DIRS)
-
-DIROBJ=$(dirs:%/=%-dir)
-
-
-$(target_all):$(DIROBJ)
-	$(call ld_mk,$(OUT_DIR)$@,$^)
-
-
-
-
-include $(SRCTREE)/rules.mk
-export CC CPP AS AR LD TOPDIR SRCTREE  CFLAGS LDFLAGS Q
-
-CLRDIR=$(dirs:%/=%-clrdir)
-clean:$(CLRDIR)
-	-rm -rf $(target_all)
-
-install:$(target_all)
-	install  $(INSTALL_FLAGS)	$(TARGET)$(LIB_VERSION)$(LIB_SUB_VERSION)  $(LIB_DIR)
+install:$(TARGET)
+	install -m 555 ${TARGET} $(INSTALL_DIR)
 	mkdir -p $(HEADERS_DIR)
-	cp	-rf $(SRC)/include/*  $(HEADERS_DIR)/
-	-rm  $(LIB_DIR)/$(TARGET)
-	-ln -s $(TARGET)$(LIB_VERSION)$(LIB_SUB_VERSION)  $(LIB_DIR)/$(TARGET)$(LIB_VERSION)
+	cp -rf $(shell pwd)/include/*  $(HEADERS_DIR)/
+
+clean:
+	rm -rf *.o
